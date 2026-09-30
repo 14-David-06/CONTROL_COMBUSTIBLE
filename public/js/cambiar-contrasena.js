@@ -53,7 +53,7 @@ formularioCambio.addEventListener('submit', async (evento) => {
 
     // Se apaga la bandera en la sesión local para que ya no vuelva a redirigir.
     const sesionActualizada = {...sesionCambio, debeCambiarContrasena: false};
-    sessionStorage.setItem('sesionCombustible', JSON.stringify(sesionActualizada));
+    localStorage.setItem('sesionCombustible', JSON.stringify(sesionActualizada));
     await mostrarAlertaExito('Contraseña actualizada', 'Ya puedes continuar al sistema.');
     window.location.replace('menu');
   } catch (error) {

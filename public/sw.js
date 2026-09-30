@@ -13,7 +13,7 @@
 // avisa si falta).
 // ============================================================================
 
-const VERSION = 'v1-2026-09-18';
+const VERSION = 'v2-2026-09-30';
 const CACHE = `combustible-${VERSION}`;
 
 const PAGINAS = [
@@ -106,7 +106,18 @@ self.addEventListener('fetch', (evento) => {
     evento.respondWith(
       (async () => {
         try {
-          const respuesta = await fetch(peticion);
+          // Límite de tiempo: con señal débil (sin internet real, pero sin
+          // "desconectado" tampoco) fetch() podía quedarse esperando en vez de
+          // fallar rápido, y la pantalla parecía trabada. A los 4s se rinde y
+          // usa la copia guardada, igual que si no hubiera señal.
+          const limite = new AbortController();
+          const aviso = setTimeout(() => limite.abort(), 4000);
+          let respuesta;
+          try {
+            respuesta = await fetch(peticion, { signal: limite.signal });
+          } finally {
+            clearTimeout(aviso);
+          }
           if (respuesta.ok && !respuesta.redirected) {
             const cache = await caches.open(CACHE);
             cache.put(url.origin + url.pathname, respuesta.clone()); // Sin ?parámetros: una copia por pantalla

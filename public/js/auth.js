@@ -3,7 +3,9 @@
 // ----------------------------------------------------------------------------
 // Este archivo se carga en TODAS las páginas protegidas (antes que el script
 // propio de cada pantalla). Aporta:
-//   * Lectura de la sesión guardada en sessionStorage.
+//   * Lectura de la sesión guardada en localStorage (ver login.js: se cambió
+//     de sessionStorage porque la app instalada abre como pestaña nueva cada
+//     vez y eso la dejaba vacía sin internet).
 //   * protegerVista(): el portero de cada página.
 //   * Las alertas visuales (SweetAlert) que usa todo el sistema.
 //   * El monitor que avisa de nuevas alertas cada 5 segundos.
@@ -27,10 +29,10 @@ function escapeHtml(valor = '') {
   return div.innerHTML; // Devuelve el texto ya con < > & convertidos
 }
 
-// Lee la sesion guardada por login.js.
+// Lee la sesion guardada por login.js (localStorage: ver el comentario en login.js).
 function obtenerSesionActual() {
   try {
-    return JSON.parse(sessionStorage.getItem('sesionCombustible')) || null;
+    return JSON.parse(localStorage.getItem('sesionCombustible')) || null;
   } catch (error) {
     return null; // Si el dato está corrupto, se trata como "sin sesión"
   }
@@ -258,6 +260,7 @@ async function cerrarSesion() {
   // igual se limpia el navegador, para no dejar al usuario atrapado.
   try { await fetch('/api/logout', { method: 'POST' }); } catch (_) {}
   sessionStorage.clear();
+  localStorage.removeItem('sesionCombustible');
   limpiarSesionEnNavegador();
   irAlLogin();
 }

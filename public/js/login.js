@@ -41,8 +41,13 @@ function guardarSesionTemporal(datosSesion) {
     fechaIngreso: new Date().toISOString()
   };
 
-  // sessionStorage se borra al cerrar la pestaña (más seguro que localStorage).
-  sessionStorage.setItem('sesionCombustible', JSON.stringify(sesion));
+  // localStorage (no sessionStorage): la app instalada abre como pestaña nueva
+  // cada vez, así que sessionStorage quedaba vacío al reabrirla sin internet y
+  // mandaba de vuelta al login aunque la cookie de sesión siguiera vigente.
+  // No es un riesgo nuevo: esto no es el token, solo rol/permisos para pintar
+  // la interfaz (ver el comentario de arriba); la seguridad real la sigue
+  // aplicando el backend con la cookie HttpOnly en cada petición.
+  localStorage.setItem('sesionCombustible', JSON.stringify(sesion));
 }
 
 // Consulta el servidor Node, que valida contra la tabla usuarios_combustible.

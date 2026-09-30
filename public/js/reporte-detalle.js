@@ -412,14 +412,18 @@ function actualizarGraficas(registros) {
   const opcionesComunes = {
     responsive: true,
     maintainAspectRatio: false,
+    // Siempre desde cero: si no, Chart.js recorta el eje y una barra pequeña
+    // (p. ej. M2) parece desaparecer.
+    scales: { y: { beginAtZero: true } },
     plugins: {
       legend: { display: true }
     }
   };
 
   // GRÁFICA 1: evolución del consumo día a día (línea con área rellena).
+  // Con pocos días una línea no se ve (un solo punto): se dibujan barras.
   graficaConsumoFecha = new Chart(document.getElementById('grafica-consumo-fecha'), {
-    type: 'line',
+    type: consumoFechas.length < 3 ? 'bar' : 'line',
     data: {
       labels: consumoFechas.map(([fecha]) => fecha),
       datasets: [{

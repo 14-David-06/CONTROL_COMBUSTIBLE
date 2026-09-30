@@ -22,7 +22,7 @@
   // ---------------------------------------------------------------- utilidades
   function sesion() {
     try {
-      return JSON.parse(sessionStorage.getItem('sesionCombustible')) || null;
+      return JSON.parse(localStorage.getItem('sesionCombustible')) || null;
     } catch (_) {
       return null;
     }
