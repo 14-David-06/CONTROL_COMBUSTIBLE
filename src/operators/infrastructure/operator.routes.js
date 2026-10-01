@@ -49,18 +49,17 @@ function crearRutasOperarios(service, auditRepository) {
   // --- DELETE /api/operarios/:id: anulación lógica -------------------------
   router.delete('/operarios/:id', requirePermission('operarios'), async (req, res, next) => {
     try {
-      const motivo = String(req.body?.motivo || '').trim();
-      const anulado = await service.remove(req.params.id, motivo, req.user.usuario);
+      const eliminado = await service.remove(req.params.id);
       await registrarAuditoria(auditRepository, {
         usuarioId: req.user.id,
         usuario: req.user.usuario,
         rol: req.user.rol,
-        accion: 'ANULAR',
+        accion: 'ELIMINAR',
         modulo: 'operarios',
         registroId: req.params.id,
-        detalle: { antes: anulado, motivo }
+        detalle: { antes: eliminado }
       });
-      res.json({ mensaje: 'Operario anulado. Los registros históricos no se modificaron.' });
+      res.json({ mensaje: 'Operario eliminado. Los registros históricos no se modificaron.' });
     } catch (error) {
       next(error);
     }

@@ -153,8 +153,11 @@ test('catálogos: crear máquina y operario, y anular con motivo', async () => {
   assert.equal(r.estado, 201);
   const idOperario = r.datos.id;
   r = await api('POST', '/api/operarios', { nombre: 'otro', cedula: '2' }, admin);
-  const anular = await api('DELETE', `/api/operarios/${r.datos.id}`, { motivo: 'prueba' }, admin);
-  assert.equal(anular.estado, 200);
+  const eliminar = await api('DELETE', `/api/operarios/${r.datos.id}`, undefined, admin);
+  assert.equal(eliminar.estado, 200);
+  // Se borra la fila (no queda anulada).
+  const [quedan] = await db.query('SELECT COUNT(*)::int AS n FROM operarios WHERE cedula=?', ['2']);
+  assert.equal(quedan[0].n, 0);
   const lista = await api('GET', '/api/operarios', undefined, admin);
   assert.ok(lista.datos.some((o) => o.id === idOperario));
   assert.ok(!lista.datos.some((o) => o.nombre === 'OTRO'));
@@ -435,12 +438,14 @@ test('pendientes y cron: jornada sin cerrar genera aviso, alerta única y push',
   assert.ok(!pend.datos.pendientes.some((p) => p.fecha === antier));
 });
 
-test('cerrar sin checklist genera la alerta de inspección pendiente', async () => {
+test('cerrar sin checklist ya NO genera alerta (la inspección es obligatoria al registrar)', async () => {
   const dia = sumarDias(hoy, -3);
   await api('PUT', `/api/jornadas/${dia}`, { m1Inicial: '1' }, admin);
   await api('POST', '/api/cierre-dia', { fecha: dia, m1Final: '2' }, admin);
   const alertas = await api('GET', '/api/alertas', undefined, sup);
-  assert.ok(alertas.datos.some((a) => a.tipo_alerta === 'inspeccion_pendiente' && a.fecha === dia));
+  assert.ok(
+    !alertas.datos.some((a) => a.tipo_alerta === 'inspeccion_pendiente' && a.fecha === dia)
+  );
 });
 
 test('push: dispositivo caducado (410) se elimina y sin claves no se envía', async () => {
@@ -535,4 +540,106 @@ test('un id inválido responde 400/404 y no 500', async () => {
   const r = await api('GET', '/api/alertas/abc/soporte', undefined, sup);
   assert.ok([400, 404].includes(r.estado), `estado ${r.estado}`);
   assert.equal((await api('PUT', '/api/registros/abc', { cantidad: 1 }, admin)).estado, 404);
+});
+
+// ------------------------------------------------ inspección, horómetro N/A, tanque móvil y edición
+test('suministro: sin la inspección del día completa no se puede registrar', async () => {
+  const dia = sumarDias(hoy, -5);
+  const r = await api(
+    'POST',
+    '/api/registros',
+    suministro({ fecha: dia, horometro: '9999', sistemaElectrico: '', paradaEmergencia: '' }),
+    admin
+  );
+  assert.equal(r.estado, 400);
+  assert.match(r.datos.mensaje, /inspección/);
+  // La transacción se deshizo: no quedó jornada de ese día.
+  const [j] = await db.query('SELECT COUNT(*)::int AS n FROM jornadas_combustible WHERE fecha=?', [
+    dia
+  ]);
+  assert.equal(j[0].n, 0);
+});
+
+test('máquina marcada sin horómetro: se guarda N/A y no genera alerta de horómetro', async () => {
+  let r = await api(
+    'POST',
+    '/api/tractores',
+    {
+      maquina: 'bomba1',
+      descripcion: 'bomba de riego',
+      centro_costo: 'cc1',
+      capacidad_galones: 100,
+      sin_horometro: true
+    },
+    admin
+  );
+  assert.equal(r.estado, 201, JSON.stringify(r.datos));
+  const tractores = await api('GET', '/api/tractores', undefined, admin);
+  assert.equal(tractores.datos.find((t) => t.maquina === 'BOMBA1').sin_horometro, true);
+
+  r = await api(
+    'POST',
+    '/api/registros',
+    suministro({ maquina: 'bomba1', horometro: 'DAÑADO', cantidad: '5' }),
+    op
+  );
+  assert.equal(r.estado, 201, JSON.stringify(r.datos));
+  const [filas] = await db.query('SELECT horometro FROM registros_combustible WHERE maquina=?', [
+    'BOMBA1'
+  ]);
+  assert.equal(filas[0].horometro, 'N/A');
+  const alertas = await api('GET', '/api/alertas', undefined, sup);
+  assert.ok(!alertas.datos.some((a) => a.maquina === 'BOMBA1'));
+});
+
+test('tanque móvil: se registra con horómetro N/A y no genera alertas', async () => {
+  await api(
+    'POST',
+    '/api/tractores',
+    {
+      maquina: 'tanque movile',
+      descripcion: 'tanque mobil',
+      centro_costo: 'n/a',
+      capacidad_galones: 10
+    },
+    admin
+  );
+  const r = await api(
+    'POST',
+    '/api/registros',
+    suministro({ maquina: 'tanque movile', horometro: '5', cantidad: '436' }),
+    op
+  );
+  assert.equal(r.estado, 201, JSON.stringify(r.datos));
+  const [filas] = await db.query('SELECT horometro FROM registros_combustible WHERE maquina=?', [
+    'TANQUE MOVILE'
+  ]);
+  assert.equal(filas[0].horometro, 'N/A');
+  const alertas = await api('GET', '/api/alertas', undefined, sup);
+  assert.ok(!alertas.datos.some((a) => a.maquina === 'TANQUE MOVILE'));
+});
+
+test('editar un registro: solo cambian No. SAI y observaciones', async () => {
+  const [[registro]] = await db.query(
+    "SELECT id,cantidad,maquina FROM registros_combustible WHERE estado<>'ANULADO' ORDER BY id LIMIT 1"
+  );
+  let r = await api(
+    'PUT',
+    `/api/registros/${registro.id}`,
+    { cantidad: 999, maquina: 'OTRA', numeroSai: 'sai-99', observaciones: 'corregido' },
+    sup
+  );
+  assert.equal(r.estado, 200, JSON.stringify(r.datos));
+  const [[despues]] = await db.query(
+    'SELECT cantidad,maquina,numero_sai,observaciones FROM registros_combustible WHERE id=?',
+    [registro.id]
+  );
+  assert.equal(Number(despues.cantidad), Number(registro.cantidad));
+  assert.equal(despues.maquina, registro.maquina);
+  assert.equal(despues.numero_sai, 'SAI-99');
+  assert.equal(despues.observaciones, 'corregido');
+
+  // Si solo se envían campos no editables, no hay nada que actualizar.
+  r = await api('PUT', `/api/registros/${registro.id}`, { cantidad: 1 }, sup);
+  assert.equal(r.estado, 400);
 });

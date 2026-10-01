@@ -9,6 +9,12 @@
 //   1. sobrecapacidad  (más galones de los que cabe en el tanque)
 //   2. promedio        (25 % por encima de su promedio histórico)
 //   3. horometro_irregular (horómetro con texto en vez de número)
+// Excepciones:
+//   * Tanque móvil: es un depósito que se rellena, no una máquina que consume.
+//     Su suministro se guarda como cualquier otro, pero no genera alertas.
+//   * Máquinas marcadas "sin horómetro" en Tractores (y el tanque móvil): el
+//     horómetro se guarda como N/A y no se valida ni genera alerta de horómetro.
+// La inspección del día (checklist) es OBLIGATORIA antes de registrar.
 // PARA CAMBIAR UMBRALES -> MIN_MUESTRAS_PROMEDIO y FACTOR_ALERTA_PROMEDIO en .env.
 // ============================================================================
 
@@ -18,6 +24,21 @@ const { hoyLocal, esFechaValida } = require('../../shared/application/fechas');
 const bad = (mensaje) => Object.assign(new Error(mensaje), { status: 400 });
 const noExiste = () => Object.assign(new Error('El registro no existe.'), { status: 404 });
 const HOROMETRO_NUMERICO = /^[0-9]+([.,][0-9]+)?$/; // Solo dígitos con coma o punto decimal
+const HOROMETRO_NO_APLICA = 'N/A';
+// Desde Tablas solo se corrigen estos campos; cantidad, máquina, operario,
+// cédula y horómetro quedan como se registraron.
+const CAMPOS_EDITABLES = ['numeroSai', 'observaciones'];
+
+// El tanque móvil se reconoce por el nombre ("TANQUE MOVIL", "TANQUE MOVILE",
+// "TANQUE MOBIL"...), en el código de la máquina o en su descripción. No se usa
+// el número de ítem: a una máquina nueva le puede tocar ese mismo número.
+const TANQUE_MOVIL = /^TANQUE M[OÓ][VB]IL/;
+function esTanqueMovil(maquina, tractor) {
+  return (
+    TANQUE_MOVIL.test(String(maquina || '').toUpperCase()) ||
+    TANQUE_MOVIL.test(String(tractor?.descripcion || '').trim().toUpperCase())
+  );
+}
 
 class RecordService {
   // jornadaService guarda el borrador de la jornada del día junto con el suministro.
@@ -56,22 +77,25 @@ class RecordService {
     if (!esFechaValida(fecha)) throw bad('La fecha del registro no es válida.');
     if (fecha > hoyLocal()) throw bad('La fecha del registro no puede ser posterior a hoy.');
 
-    // El horómetro (horas de la máquina) solo puede avanzar, nunca retroceder.
-    const horometroNumero = Number(String(datos.horometro || '').replace(',', '.'));
-    if (Number.isFinite(horometroNumero)) {
-      const ultimo = await this.repository.latestHourmeter(datos.maquina);
-      if (ultimo && horometroNumero < ultimo)
-        throw bad(
-          `El horometro no puede ser menor al ultimo registrado para ${datos.maquina}: ${ultimo}.`
-        );
-    }
-
     // La capacidad del tanque se consulta ANTES de abrir la transacción (así la
     // transacción dura lo mínimo).
     const tractor = datos.maquina
       ? await this.tractorRepository.findByMachine(datos.maquina)
       : null;
     const capacidad = Number(tractor?.capacidad_galones || 0); // 0 = sin capacidad definida
+    const tanqueMovil = esTanqueMovil(datos.maquina, tractor);
+    const sinHorometro = tanqueMovil || Boolean(tractor?.sin_horometro);
+    if (sinHorometro) datos.horometro = HOROMETRO_NO_APLICA;
+
+    // El horómetro (horas de la máquina) solo puede avanzar, nunca retroceder.
+    const horometroNumero = Number(String(datos.horometro || '').replace(',', '.'));
+    if (!sinHorometro && Number.isFinite(horometroNumero)) {
+      const ultimo = await this.repository.latestHourmeter(datos.maquina);
+      if (ultimo && horometroNumero < ultimo)
+        throw bad(
+          `El horometro no puede ser menor al ultimo registrado para ${datos.maquina}: ${ultimo}.`
+        );
+    }
 
     // Todo en una transacción: o se guarda el suministro con su jornada y
     // alertas, o no se guarda nada.
@@ -97,19 +121,18 @@ class RecordService {
         (jornada?.m2_inicial !== null && jornada?.m2_inicial !== undefined);
       if (!hayInicial)
         throw bad('Debes tener al menos una lectura inicial disponible para iniciar el registro.');
+      const checklistCompleto = ['fuga_biodiesel', 'sistema_electrico', 'parada_emergencia'].every(
+        (columna) => String(jornada?.[columna] || '').trim() !== ''
+      );
+      if (!checklistCompleto)
+        throw bad('Debes diligenciar la inspección del día antes de registrar un suministro.');
 
       const id = await this.repository.insert({ ...datos, fecha, registradoPor: usuario }, tx);
 
       const cantidad = Number(datos.cantidad || 0); // Galones cargados
 
-      // El tanque móvil es un depósito que se rellena: no genera alertas de
-      // ningún tipo (ni sobrecapacidad, ni promedio, ni horómetro).
-      const esTanqueMovil =
-        Number(tractor?.item) === 73 ||
-        /^TANQUE M[OÓ][VB]IL/.test(datos.maquina) ||
-        /^TANQUE M[OÓ][VB]IL/.test(String(tractor?.descripcion || '').trim().toUpperCase());
-
-      if (this.alertService && !esTanqueMovil) {
+      // El tanque móvil no genera alertas de ningún tipo.
+      if (this.alertService && !tanqueMovil) {
         // ALERTA 1 (sobrecapacidad): se cargó más de lo que cabe en el tanque.
         // Si ya excede la capacidad, no se evalúa el promedio (sería redundante).
         if (capacidad > 0 && cantidad > capacidad) {
@@ -153,7 +176,7 @@ class RecordService {
 
         // ALERTA 3 (horómetro irregular): se escribió texto en vez de un número.
         const horometroTexto = String(datos.horometro || '').trim();
-        if (horometroTexto && !HOROMETRO_NUMERICO.test(horometroTexto)) {
+        if (!sinHorometro && horometroTexto && !HOROMETRO_NUMERICO.test(horometroTexto)) {
           const anterior = await this.repository.latestHourmeter(datos.maquina, tx);
           await crearAlerta({
             registroId: id,
@@ -207,12 +230,15 @@ class RecordService {
     return this.repository.findById(texto);
   }
 
-  // Edición: prohibida sobre registros anulados.
+  // Edición: solo No. SAI y observaciones, y nunca sobre registros anulados.
   async update(id, cambios) {
     const actual = await this.findById(id);
     if (!actual) throw noExiste();
     if (actual.estado === 'ANULADO') throw bad('No se puede editar un registro anulado.');
-    return this.repository.update(id, cambios);
+    const permitidos = Object.fromEntries(
+      Object.entries(cambios || {}).filter(([campo]) => CAMPOS_EDITABLES.includes(campo))
+    );
+    return this.repository.update(id, permitidos);
   }
 
   // ANULAR un registro: motivo obligatorio, debe existir y no estar ya anulado.

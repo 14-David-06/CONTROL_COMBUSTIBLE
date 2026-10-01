@@ -40,13 +40,10 @@ class PgOperatorRepository extends OperatorRepository {
     return { id: filas[0].id, nombre, cedula };
   }
 
-  // Anula en vez de borrar: conserva el operario para los registros historicos
-  // que ya lo referencian por nombre/cedula.
-  async remove(id, motivo, usuario) {
-    const [, resultado] = await this.db.query(
-      "UPDATE operarios SET estado='ANULADO',motivo_anulacion=?,usuario_anulacion=?,fecha_anulacion=NOW() WHERE id=? AND estado<>'ANULADO'",
-      [motivo || null, usuario || null, id]
-    );
+  // Borra el operario. Los registros históricos no se afectan: guardan el
+  // nombre y la cédula como texto, sin depender de esta fila.
+  async remove(id) {
+    const [, resultado] = await this.db.query('DELETE FROM operarios WHERE id=?', [id]);
     return resultado.rowCount > 0;
   }
 }

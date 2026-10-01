@@ -40,8 +40,11 @@ function actualizarRegistroLocal(indice,cambios){const registros=obtenerRegistro
 // Envía la edición al servidor (PUT /api/registros/:id). Si el registro no
 // tiene id, es un dato solo local y se actualiza únicamente en el navegador.
 async function actualizarRegistroServidor(registro,cambios){if(!registro.id){actualizarRegistroLocal(registro.indiceOriginal,cambios);return;}const r=await fetch(`/api/registros/${registro.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(cambios)});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.mensaje||'No se pudo actualizar el registro.');}}
+// Campos que se pueden corregir desde esta pantalla (el servidor aplica la misma
+// lista en record.service.js). Los demás se muestran siempre bloqueados.
+const CAMPOS_EDITABLES_TABLA=['numeroSai','observaciones'];
 // Crea un campo de la tarjeta. Nace deshabilitado: solo se activa al pulsar
-// "Editar". data-campo guarda el nombre que espera la API.
+// "Editar" y únicamente si está en CAMPOS_EDITABLES_TABLA. data-campo guarda el nombre que espera la API.
 function campoTarjeta(label,campo,valor,tipo='text'){const wrapper=document.createElement('label');wrapper.className='campo-registro-tarjeta';wrapper.innerHTML=`<span>${label}</span>`;const input=document.createElement('input');input.type=tipo;input.value=valor??'';input.dataset.campo=campo;input.disabled=true;if(tipo==='number'){input.step='0.01';input.min='0';}wrapper.appendChild(input);return wrapper;}
 
 // Construye una tarjeta completa de registro: cabecera, campos, firma y botones.
@@ -49,8 +52,8 @@ function crearTarjeta(registro){
  const card=document.createElement('article');card.className='registro-tarjeta';card.dataset.id=registro.id||'';
  // Cabecera: fecha, máquina, operario/cédula y la cantidad destacada a la derecha.
  const cab=document.createElement('div');cab.className='registro-tarjeta-cabecera';cab.innerHTML=`<div><span class="badge-registro-fecha">${escapeHtml(formatearFechaTabla(registro.fecha))}</span><h3>${escapeHtml(registro.maquina||'Máquina no registrada')}</h3><p>${escapeHtml(registro.operario||'Operario no registrado')} · C.C. ${escapeHtml(registro.cedula||'—')}</p></div><div class="registro-cantidad"><strong>${Number(registro.cantidad||0).toFixed(2)}</strong><span>GAL</span></div>`;card.appendChild(cab);
- // Rejilla con los campos editables. SON LOS MISMOS SIETE QUE ACEPTA LA API
- // (ver la lista blanca en mysql-record.repository.js -> update).
+ // Rejilla con los datos del registro. Solo No. SAI y Observaciones se pueden
+ // editar (CAMPOS_EDITABLES_TABLA); el resto es de solo lectura.
  const grid=document.createElement('div');grid.className='grid-campos-registro';
  grid.appendChild(campoTarjeta('Máquina','maquina',registro.maquina));grid.appendChild(campoTarjeta('Operario','operario',registro.operario));grid.appendChild(campoTarjeta('Cédula','cedula',registro.cedula));grid.appendChild(campoTarjeta('Horómetro','horometro',registro.horometro));grid.appendChild(campoTarjeta('Cantidad (GAL)','cantidad',registro.cantidad,'number'));grid.appendChild(campoTarjeta('No. SAI','numeroSai',registro.numeroSai));
  const obs=campoTarjeta('Observaciones','observaciones',registro.observaciones);grid.appendChild(obs);card.appendChild(grid);
@@ -60,7 +63,7 @@ function crearTarjeta(registro){
  const acciones=document.createElement('div');acciones.className='acciones-tarjeta-registro';
  const editar=document.createElement('button');editar.type='button';editar.className='boton-secundario';editar.textContent='✏ Editar';
  const guardar=document.createElement('button');guardar.type='button';guardar.className='boton-principal';guardar.textContent='✓ Guardar';guardar.hidden=true;
- const inputs=[...grid.querySelectorAll('input')];
+ const inputs=[...grid.querySelectorAll('input')].filter(i=>CAMPOS_EDITABLES_TABLA.includes(i.dataset.campo));
  // "Editar": habilita los campos, cambia los botones y pone el cursor en el primero.
  editar.onclick=()=>{inputs.forEach(i=>i.disabled=false);editar.hidden=true;guardar.hidden=false;inputs[0]?.focus();};
  // "Guardar": arma el objeto de cambios leyendo cada data-campo, lo envía al

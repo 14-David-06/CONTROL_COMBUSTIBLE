@@ -3,7 +3,8 @@
      index.html — REGISTRO DE SUMINISTRO (pantalla principal de operación)
      Estructura de la página:
        1. Asistente de 4 pasos: máquina -> operario -> suministro -> confirmar.
-       2. Control del surtidor: lecturas M1/M2, total del día y checklist.
+       0. Inspección del día (checklist): obligatoria antes de registrar.
+       2. Control del surtidor: lecturas M1/M2 y total del día.
        3. Tabla con los registros hechos durante esta sesión.
        4. Ventana de firma (canvas), oculta hasta que se pulsa "Firmar".
      Toda la lógica está en ../js/app.js. Requiere el permiso 'registro'.
@@ -41,6 +42,13 @@
         <span></span><span></span><span></span>
       </button>
     </header>
+
+    <!-- ================ INSPECCIÓN DEL DÍA (OBLIGATORIA) ================ -->
+    <!-- Va ANTES de los registros: sin las tres respuestas no se puede avanzar
+         ni guardar un suministro (lo valida app.js y también el servidor).
+         Se diligencia una vez al día y se guarda sola (jornada-borrador.js).
+         La fecha está deshabilitada: siempre es el día actual. -->
+    <section class="panel checklist-surtidor" id="inspeccion-diaria"><span class="eyebrow-dashboard">INSPECCIÓN DEL DÍA · OBLIGATORIA ANTES DE REGISTRAR</span><div class="checklist-grid"><label>Fuga de Biodiesel <span><input type="radio" name="fuga-biodiesel" value="SI"> Sí</span><span><input type="radio" name="fuga-biodiesel" value="NO"> No</span></label><label>Sistema eléctrico <span><input type="radio" name="sistema-electrico" value="Buen estado"> Bueno</span><span><input type="radio" name="sistema-electrico" value="Mal"> Mal</span></label><label>Parada de emergencia <span><input type="radio" name="parada-emergencia" value="Buen estado"> Bueno</span><span><input type="radio" name="parada-emergencia" value="Mal"> Mal</span></label><label>Fecha <input type="date" id="fecha" name="fecha" autocomplete="off" disabled aria-label="Fecha automática del día"></label><small class="fecha-automatica-ayuda">La fecha se asigna automáticamente según el día actual.</small></div></section>
 
     <!-- ====================== ASISTENTE POR PASOS ====================== -->
     <!-- Hay DOS copias idénticas de este asistente (sufijo -1 y -2): una
@@ -194,10 +202,6 @@
       </div>
       <!-- Total del día y botón que envía el cierre a /api/cierre-dia -->
       <div class="total-surtidor"><span>⛽ TOTAL DEL DÍA</span><strong id="galones-total">—</strong><small>GALONES</small><button type="button" id="boton-guardar-cierre-dia" class="boton-principal">Guardar cierre del día</button></div>
-      <!-- CHECKLIST DE INSPECCIÓN: se diligencia una vez al día. Si el día se
-           cierra sin llenarlo, el servidor genera una alerta de inspección
-           pendiente. La fecha está deshabilitada: siempre es el día actual. -->
-      <div class="panel checklist-surtidor"><span class="eyebrow-dashboard">INSPECCIÓN</span><div class="checklist-grid"><label>Fuga de Biodiesel <span><input type="radio" name="fuga-biodiesel" value="SI"> Sí</span><span><input type="radio" name="fuga-biodiesel" value="NO"> No</span></label><label>Sistema eléctrico <span><input type="radio" name="sistema-electrico" value="Buen estado"> Bueno</span><span><input type="radio" name="sistema-electrico" value="Mal"> Mal</span></label><label>Parada de emergencia <span><input type="radio" name="parada-emergencia" value="Buen estado"> Bueno</span><span><input type="radio" name="parada-emergencia" value="Mal"> Mal</span></label><label>Fecha <input type="date" id="fecha" name="fecha" autocomplete="off" disabled aria-label="Fecha automática del día"></label><small class="fecha-automatica-ayuda">La fecha se asigna automáticamente según el día actual.</small></div></div>
     </section>
 
     <!-- ============ REGISTROS DE ESTA SESIÓN ============ -->
@@ -238,7 +242,7 @@
   <!-- El ?v=... obliga al navegador a descargar la versión nueva del script en
        vez de usar la guardada en caché. Si haces cambios en app.js y no se
        reflejan, cambia ese número de versión. -->
-  <script src="../js/app.js?v=20260923-1"></script>
+  <script src="../js/app.js?v=20261001-1"></script>
   <!-- Autoguardado de las lecturas M1/M2 y del checklist (depende de app.js). -->
   <script src="../js/jornada-borrador.js?v=20260918-1"></script>
 </body>

@@ -13,6 +13,7 @@ const tractorMaquina = document.getElementById('tractor-maquina');
 const tractorDescripcion = document.getElementById('tractor-descripcion-form');
 const tractorCentroCosto = document.getElementById('tractor-centro-costo-form');
 const tractorCapacidad = document.getElementById('tractor-capacidad-form');
+const tractorHorometro = document.getElementById('tractor-horometro-form'); // "valido" | "na"
 const cuerpoTablaTractores = document.getElementById('cuerpo-tabla-tractores');
 const cantidadTractores = document.getElementById('cantidad-tractores');
 
@@ -103,6 +104,7 @@ function pintarTractores(tractores, consumoPorMaquina = new Map()) {
       <div class="datos-tractor-card">
         <div class="dato-registro"><span>Centro de costo</span><strong class="centro-registro"></strong></div>
         <div class="dato-registro"><span>Capacidad del tanque</span><strong class="capacidad-registro"></strong></div>
+        <div class="dato-registro"><span>Horómetro</span><strong class="horometro-registro"></strong></div>
       </div>
       <div class="consumo-tractor-card"></div>
       <div class="acciones-registro"></div>`;
@@ -110,6 +112,7 @@ function pintarTractores(tractores, consumoPorMaquina = new Map()) {
     tarjeta.querySelector('.maquina-registro').textContent = tractor.maquina || 'SIN MÁQUINA';
     tarjeta.querySelector('.descripcion-registro').textContent = tractor.descripcion || 'Sin descripción';
     tarjeta.querySelector('.badge-tipo-maquina').textContent = tipoDeMaquina(tractor.descripcion);
+    tarjeta.querySelector('.horometro-registro').textContent = tractor.sin_horometro ? 'No aplica (N/A)' : 'Válido';
     tarjeta.querySelector('.centro-registro').textContent = tractor.centro_costo || '—';
     tarjeta.querySelector('.capacidad-registro').textContent = `${Number.isFinite(capacidad) ? capacidad.toFixed(2) : '0.00'} gal`;
 
@@ -159,6 +162,7 @@ function activarEdicionTractor(tarjeta, tractor) {
       <label>Descripción<input class="ed-descripcion" type="text" maxlength="150" required></label>
       <label>Centro de costo<input class="ed-centro" type="text" maxlength="20" required></label>
       <label>Capacidad (galones)<input class="ed-capacidad" type="number" min="0" step="0.01" required></label>
+      <label>Horómetro<select class="ed-horometro"><option value="valido">Válido (se registra el horómetro)</option><option value="na">No aplica (se registra N/A, sin alerta)</option></select></label>
     </div>
     <div class="acciones-registro"></div>`;
 
@@ -167,6 +171,7 @@ function activarEdicionTractor(tarjeta, tractor) {
   tarjeta.querySelector('.ed-descripcion').value = tractor.descripcion ?? '';
   tarjeta.querySelector('.ed-centro').value = tractor.centro_costo ?? '';
   tarjeta.querySelector('.ed-capacidad').value = Number.isFinite(capacidad) ? capacidad : 0;
+  tarjeta.querySelector('.ed-horometro').value = tractor.sin_horometro ? 'na' : 'valido';
 
   const acciones = tarjeta.querySelector('.acciones-registro');
   const botonGuardar = document.createElement('button');
@@ -189,7 +194,8 @@ async function guardarEdicionTractor(tarjeta, tractor) {
     maquina: tarjeta.querySelector('.ed-maquina').value.trim().toUpperCase(),
     descripcion: tarjeta.querySelector('.ed-descripcion').value.trim().toUpperCase(),
     centro_costo: tarjeta.querySelector('.ed-centro').value.trim().toUpperCase(),
-    capacidad_galones: Number(tarjeta.querySelector('.ed-capacidad').value || 0)
+    capacidad_galones: Number(tarjeta.querySelector('.ed-capacidad').value || 0),
+    sin_horometro: tarjeta.querySelector('.ed-horometro').value === 'na'
   };
 
   // Validación en pantalla antes de gastar una petición al servidor.
@@ -226,7 +232,8 @@ formularioTractor.addEventListener('submit', async (evento) => {
       maquina: tractorMaquina.value.trim().toUpperCase(),
       descripcion: tractorDescripcion.value.trim().toUpperCase(),
       centro_costo: tractorCentroCosto.value.trim().toUpperCase(),
-      capacidad_galones: Number(tractorCapacidad.value || 0)
+      capacidad_galones: Number(tractorCapacidad.value || 0),
+      sin_horometro: tractorHorometro.value === 'na'
     })
   });
 

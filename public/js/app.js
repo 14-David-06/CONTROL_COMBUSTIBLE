@@ -316,21 +316,29 @@ async function cargarTractoresEnFormulario() {
   }
 }
 
-// Identifica solo el Tanque Movil que esta creado en tractores con item 73 e id 198.
-// Se comprueba por id, por ítem y por nombre para que siga funcionando aunque
-// el registro cambie de identificador en la base de datos. (Pura: la usan los dos puestos.)
+// Identifica el tanque móvil por su nombre ("TANQUE MOVIL", "TANQUE MOVILE",
+// "TANQUE MOBIL"...), igual que el servidor (record.service.js). (Pura: la usan los dos puestos.)
 function esTanqueMovil(tractor) {
-  if (!tractor) {
-    return false;
-  }
+  if (!tractor) return false;
+  const patron = /^TANQUE M[OÓ][VB]IL/;
+  return patron.test(String(tractor.maquina || '').trim().toUpperCase())
+    || patron.test(String(tractor.descripcion || '').trim().toUpperCase());
+}
 
-  const nombreMaquina = String(tractor.maquina || '').trim().toLowerCase();
-  const descripcion = String(tractor.descripcion || '').trim().toLowerCase();
+// Máquinas que no llevan horómetro: el tanque móvil y las marcadas así en Tractores.
+function maquinaSinHorometro(tractor) {
+  return esTanqueMovil(tractor) || Boolean(tractor?.sin_horometro);
+}
 
-  return Number(tractor.id) === 198
-    || Number(tractor.item) === 73
-    || nombreMaquina === 'tanque movil'
-    || descripcion === 'tanque movil';
+// ¿Ya se respondieron las tres preguntas de la inspección del día?
+function inspeccionCompleta() {
+  return ['fuga-biodiesel', 'sistema-electrico', 'parada-emergencia'].every((nombre) => obtenerValorChequeo(nombre) !== '');
+}
+
+// Avisa que falta la inspección y lleva la pantalla hasta ella.
+async function avisarInspeccionPendiente() {
+  document.getElementById('inspeccion-diaria')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  await mostrarAlertaError('Inspección obligatoria', 'Diligencia la inspección del día (arriba) antes de registrar un suministro.');
 }
 
 // Normaliza el texto del buscador de máquinas: sin acentos, sin signos y en
@@ -507,6 +515,11 @@ async function obtenerCapacidadMaquina(nombreMaquina) {
 // Son las mismas reglas que aplica el servidor; aquí se adelantan para dar
 // una respuesta inmediata al usuario. La usan los dos puestos por igual.
 async function validarRegistroAntesDeGuardar(registro) {
+  if (!inspeccionCompleta()) {
+    await avisarInspeccionPendiente();
+    return false;
+  }
+
   if (!registro.m1Inicial && !registro.m2Inicial) {
     await mostrarAlertaError('Faltan lecturas iniciales', 'Debes tener al menos una lectura inicial disponible para continuar.');
     return false;
@@ -585,13 +598,15 @@ function crearPuestoRegistro(sufijo, etiqueta) {
     }
     actualizarIndicadorCapacidad();
 
-    // El tanque movil no maneja horometro, por eso se llena automaticamente como N/A.
-    if (esTanqueMovil(tractorSeleccionado)) {
+    // Sin horómetro (tanque móvil o marcada así en Tractores): se fija N/A y no se puede cambiar.
+    if (maquinaSinHorometro(tractorSeleccionado)) {
       horometro.value = 'N/A';
+      horometro.readOnly = true;
       return;
     }
 
-    // Si se cambia del tanque móvil a otra máquina, se limpia el "N/A".
+    // Si se cambia a una máquina con horómetro, se limpia el "N/A".
+    horometro.readOnly = false;
     if (horometro.value === 'N/A') {
       horometro.value = '';
     }
@@ -686,6 +701,7 @@ function crearPuestoRegistro(sufijo, etiqueta) {
   // Requisitos para poder avanzar: paso 1 máquina, paso 2 operario con cédula,
   // paso 3 cantidad mayor que cero y firma guardada.
   function validarPaso(numero) {
+    if (!inspeccionCompleta()) { avisarInspeccionPendiente(); return false; }
     if (numero === 1 && !maquina.value) { mostrarAlertaError('Selecciona una máquina', 'Elige una máquina para continuar.'); return false; }
     if (numero === 2 && (!nombreOperario.value || !cedulaOperario.value)) { mostrarAlertaError('Selecciona un operario', 'Elige quién realiza el suministro.'); return false; }
     if (numero === 3) {
@@ -851,6 +867,7 @@ function crearPuestoRegistro(sufijo, etiqueta) {
     tractorDescripcion.value = '';
     tractorCentroCosto.value = '';
     horometro.value = '';
+    horometro.readOnly = false;
     cantidad.value = '';
     numeroSai.value = '';
     observaciones.value = '';

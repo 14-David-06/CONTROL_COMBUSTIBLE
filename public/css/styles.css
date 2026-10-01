@@ -83,7 +83,7 @@ select:focus { outline: 2px solid #f5a524; border-color: #f5a524; }
 /* Botones de guardar/eliminar dentro de la tabla de usuarios */
 .acciones-usuario { display: flex; gap: 8px; justify-content: center; }
 /* Formulario para agregar tractores a la tabla tractores */
-.formulario-tractor { display: grid; grid-template-columns: 120px minmax(140px, 0.7fr) minmax(240px, 1.5fr) minmax(140px, 0.7fr) auto; gap: 14px; align-items: end; }
+.formulario-tractor { display: grid; grid-template-columns: 120px minmax(140px, 0.7fr) minmax(240px, 1.5fr) minmax(140px, 0.7fr) minmax(170px, 0.9fr) auto; gap: 14px; align-items: end; }
 /* Tabla de administracion de tractores */
 .tabla-tractores { min-width: 860px; }
 /* Formulario para agregar operarios a la tabla operarios */

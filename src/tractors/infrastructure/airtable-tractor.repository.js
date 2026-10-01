@@ -8,13 +8,22 @@ const { TractorRepository } = require('../domain/tractor.repository');
 const { textoFormula } = require('../../shared/infrastructure/airtable-formula');
 
 const TABLA = 'tractores';
-const soloColumnas = ({ id, item, maquina, descripcion, centro_costo, capacidad_galones }) => ({
+const soloColumnas = ({
   id,
   item,
   maquina,
   descripcion,
   centro_costo,
-  capacidad_galones
+  capacidad_galones,
+  sin_horometro
+}) => ({
+  id,
+  item,
+  maquina,
+  descripcion,
+  centro_costo,
+  capacidad_galones,
+  sin_horometro: Boolean(sin_horometro) // Casilla vacía en Airtable = no viene el campo
 });
 
 class AirtableTractorRepository extends TractorRepository {
@@ -61,10 +70,27 @@ class AirtableTractorRepository extends TractorRepository {
       .trim()
       .toUpperCase();
     const capacidad_galones = Number(datos.capacidad_galones || 0);
+    const sin_horometro = Boolean(datos.sin_horometro);
     const [fila] = await this.cliente.crear(TABLA, [
-      { item, maquina, descripcion, centro_costo, capacidad_galones, estado: 'ACTIVO' }
+      {
+        item,
+        maquina,
+        descripcion,
+        centro_costo,
+        capacidad_galones,
+        sin_horometro,
+        estado: 'ACTIVO'
+      }
     ]);
-    return { id: fila.id, item, maquina, descripcion, centro_costo, capacidad_galones };
+    return {
+      id: fila.id,
+      item,
+      maquina,
+      descripcion,
+      centro_costo,
+      capacidad_galones,
+      sin_horometro
+    };
   }
 
   async update(id, datos) {
@@ -80,10 +106,19 @@ class AirtableTractorRepository extends TractorRepository {
       .trim()
       .toUpperCase();
     const capacidad_galones = Number(datos.capacidad_galones || 0);
+    const sin_horometro = Boolean(datos.sin_horometro);
     await this.cliente.actualizar(TABLA, [
-      { id, campos: { maquina, descripcion, centro_costo, capacidad_galones } }
+      { id, campos: { maquina, descripcion, centro_costo, capacidad_galones, sin_horometro } }
     ]);
-    return { id, item: existente.item, maquina, descripcion, centro_costo, capacidad_galones };
+    return {
+      id,
+      item: existente.item,
+      maquina,
+      descripcion,
+      centro_costo,
+      capacidad_galones,
+      sin_horometro
+    };
   }
 
   async remove(id, motivo, usuario) {

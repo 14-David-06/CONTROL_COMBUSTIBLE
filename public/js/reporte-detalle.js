@@ -134,6 +134,13 @@ function obtenerConsumoRegistro(registro) {
 // El consumo acumulado por maquina debe sumar solamente los suministros
 // asociados a esa maquina. Los cierres M1/M2 no tienen maquina y nunca deben
 // entrar en esta grafica.
+// El tanque móvil ("TANQUE MOVIL", "TANQUE MOVILE", "TANQUE MOBIL"...) es un depósito
+// que se rellena, no una máquina que consume: sus suministros se listan, pero no
+// entran en el Resumen total, los promedios ni el consumo por máquina.
+function esTanqueMovilReporte(registro) {
+  return /^TANQUE M[OÓ][VB]IL/.test(String(registro?.maquina || '').trim().toUpperCase());
+}
+
 function obtenerConsumoMaquina(registro) {
   const cantidad = numeroGrafica(registro.cantidad);
 
@@ -204,9 +211,8 @@ function agruparConsumoPorMaquina(registros) {
     // para esta grafica.
     const maquina = String(registro.maquina || '').trim().toUpperCase();
     if (!maquina || esCierreDia(registro)) return;
-    // El tanque móvil es un depósito que se rellena, no una máquina que consume:
-    // no entra en el ranking ni en "Máquina con mayor consumo".
-    if (/^TANQUE M[OÓ][VB]IL/.test(maquina)) return; // MOVIL o MOBILE
+    // El tanque móvil no entra en el ranking ni en "Máquina con mayor consumo".
+    if (esTanqueMovilReporte(registro)) return;
 
     const consumo = obtenerConsumoMaquina(registro);
     if (!Number.isFinite(consumo) || consumo === 0) return;
@@ -241,18 +247,20 @@ async function cargarTipoPorMaquina() {
   } catch (_) {} // Silencioso: sin este dato la columna "Tipo" dirá "Sin tipo"
 }
 
-// KPIs del periodo: consumo total, registros, promedio, alertas y maquina top.
+// KPIs del periodo: resumen total, registros, promedio, alertas y maquina top.
+// El Resumen total y el promedio no incluyen al tanque móvil.
 function renderizarKpisReporte(registros, alertas) {
   if (!kpisReporte) return;
   // Los cierres de día no cuentan como suministros.
   const suministros = registros.filter((registro) => !esCierreDia(registro));
-  const totalGalones = suministros.reduce((total, registro) => total + obtenerConsumoRegistro(registro), 0);
+  const consumos = suministros.filter((registro) => !esTanqueMovilReporte(registro));
+  const totalGalones = consumos.reduce((total, registro) => total + obtenerConsumoRegistro(registro), 0);
   const totalRegistros = suministros.length;
-  const promedio = totalRegistros ? totalGalones / totalRegistros : 0;
+  const promedio = consumos.length ? totalGalones / consumos.length : 0;
   const top = agruparConsumoPorMaquina(registros)[0]; // La de mayor consumo
 
   const tarjetas = [
-    { clase: 'kpi-consumo', icon: '⛽', label: 'Consumo total', valor: `${totalGalones.toFixed(2)} GAL` },
+    { clase: 'kpi-consumo', icon: '⛽', label: 'Resumen total', valor: `${totalGalones.toFixed(2)} GAL` },
     { clase: 'kpi-registros', icon: '📋', label: 'Registros', valor: String(totalRegistros) },
     { clase: 'kpi-promedio', icon: '📊', label: 'Promedio por suministro', valor: `${promedio.toFixed(2)} GAL` },
     { clase: 'kpi-alertas', icon: '🔔', label: 'Alertas', valor: String(alertas.length) },
@@ -300,7 +308,7 @@ function calcularResumenPorMaquina(registros, alertas) {
   // Primera pasada: se acumulan registros y galones por máquina.
   registros.forEach((registro) => {
     const maquina = String(registro.maquina || '').trim().toUpperCase();
-    if (!maquina || esCierreDia(registro)) return;
+    if (!maquina || esCierreDia(registro) || esTanqueMovilReporte(registro)) return;
     const consumo = obtenerConsumoMaquina(registro);
     if (!mapa.has(maquina)) mapa.set(maquina, { maquina, registros: 0, galones: 0, alertas: 0 });
     const entrada = mapa.get(maquina);
@@ -383,7 +391,9 @@ function actualizarGraficas(registros) {
   const lista = Array.isArray(registros) ? registros : [];
   const busqueda = String(buscarMaquinaReporte.value || '').trim();
   const maquinaSeleccionada = busqueda || 'GENERAL';
-  const totalConsumo = lista.reduce((total, registro) => total + obtenerConsumoRegistro(registro), 0);
+  const totalConsumo = lista
+    .filter((registro) => !esTanqueMovilReporte(registro)) // Resumen total: sin tanque móvil
+    .reduce((total, registro) => total + obtenerConsumoRegistro(registro), 0);
   const consumoFechas = agruparConsumoPorFecha(lista);
   const consumoMangueras = calcularConsumoM1M2(jornadasMensuales); // M1/M2 salen de las jornadas, no de los suministros
   const consumoMaquinas = agruparConsumoPorMaquina(lista);

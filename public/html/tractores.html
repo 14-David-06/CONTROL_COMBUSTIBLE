@@ -70,6 +70,16 @@
           <input type="number" id="tractor-capacidad-form" min="0" step="0.01" autocomplete="off" required>
         </div>
 
+        <div>
+          <label for="tractor-horometro-form">Horómetro</label>
+          <!-- "No aplica": al registrar combustible el horómetro queda como N/A
+               y no se genera alerta de horómetro (columna sin_horometro) -->
+          <select id="tractor-horometro-form" required>
+            <option value="valido">Válido (se registra el horómetro)</option>
+            <option value="na">No aplica (se registra N/A, sin alerta)</option>
+          </select>
+        </div>
+
         <button type="submit">Agregar máquina</button>
       </form>
     </section>

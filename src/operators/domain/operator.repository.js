@@ -22,7 +22,7 @@ class OperatorRepository {
   }
 
   async remove() {
-    // Anulación lógica
+    // Borra el operario
     throw new Error('Not implemented');
   }
 }

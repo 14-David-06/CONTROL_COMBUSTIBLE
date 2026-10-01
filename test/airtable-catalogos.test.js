@@ -88,12 +88,13 @@ test('tractores: update cambia los datos; remove es idempotente (false la segund
   assert.equal(await tractores.remove(t.id, 'motivo', 'admin'), false);
 });
 
-test('operarios: create, list (sin anulados) y remove', async () => {
+test('operarios: create, list y remove (borra la fila)', async () => {
   const { operarios } = montar();
   const o = await operarios.create({ nombre: 'juan perez', cedula: '1001' });
   assert.equal(o.nombre, 'JUAN PEREZ');
   const o2 = await operarios.create({ nombre: 'ana gomez', cedula: '1002' });
-  await operarios.remove(o2.id, 'motivo', 'admin');
+  assert.equal(await operarios.remove(o2.id), true);
+  assert.equal(await operarios.findById(o2.id), null);
   const lista = await operarios.list();
   assert.equal(lista.length, 1);
   assert.equal(lista[0].nombre, 'JUAN PEREZ');

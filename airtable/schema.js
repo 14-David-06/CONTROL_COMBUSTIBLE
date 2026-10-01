@@ -60,6 +60,7 @@ const TABLAS = {
     texto('descripcion'),
     texto('centro_costo'),
     numero('capacidad_galones'),
+    marca('sin_horometro'), // Sin horómetro: el suministro se guarda como N/A y no genera alerta
     ...anulacion()
   ],
 

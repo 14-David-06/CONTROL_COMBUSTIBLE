@@ -1,7 +1,7 @@
 // ============================================================================
 // operarios.js — PANTALLA DE OPERARIOS (public/html/operarios.html)
 // ----------------------------------------------------------------------------
-// Permite ver, agregar y anular operarios. Cada operario se muestra como una
+// Permite ver, agregar y eliminar operarios. Cada operario se muestra como una
 // tarjeta con su avatar de iniciales, nombre y cédula.
 // ============================================================================
 
@@ -75,12 +75,12 @@ function pintarOperarios(operarios) {
     tarjeta.querySelector('h3').textContent = nombre;
     tarjeta.querySelector('.cedula-registro').textContent = operario.cedula ?? '—';
 
-    // Botón de anulación (el texto dice "Eliminar", pero solo anula).
+    // Botón para eliminar (borra el operario; los registros guardados no cambian).
     const botonEliminar = document.createElement('button');
     botonEliminar.type = 'button';
     botonEliminar.textContent = 'Eliminar';
     botonEliminar.className = 'boton-eliminar boton-accion-card';
-    botonEliminar.addEventListener('click', () => eliminarOperario(operario.id));
+    botonEliminar.addEventListener('click', () => eliminarOperario(operario.id, nombre));
     tarjeta.querySelector('.acciones-registro').appendChild(botonEliminar);
 
     cuerpoTablaOperarios.appendChild(tarjeta);
@@ -112,32 +112,28 @@ formularioOperario.addEventListener('submit', async (evento) => {
   mostrarAlertaExito('Operario agregado', 'El operario fue agregado correctamente.');
 });
 
-// Anula un operario sin borrar los registros historicos ya guardados.
-async function eliminarOperario(id) {
-  // El motivo es obligatorio: sin él, el backend rechaza la operación.
-  const motivo = await solicitarMotivoAnulacion(
-    'Anular operario',
-    'El operario no se borrará: quedará anulado y los registros guardados no se modificarán.'
+// Elimina un operario: se borra de la base (también deja de existir para la
+// otra aplicación que comparte la tabla). Los registros ya guardados no cambian.
+async function eliminarOperario(id, nombre) {
+  const confirmado = await confirmarAccion(
+    'Eliminar operario',
+    `Se borrará a ${nombre} de la lista de operarios. Los registros de combustible ya guardados no se modifican.`
   );
-
-  if (!motivo) {
-    return; // El usuario canceló
-  }
+  if (!confirmado) return; // El usuario canceló
 
   const respuesta = await fetch(`/api/operarios/${id}`, {
     method: 'DELETE',
-    headers: obtenerCabecerasOperarios(),
-    body: JSON.stringify({ motivo }) // El motivo viaja en el cuerpo del DELETE
+    headers: obtenerCabecerasOperarios()
   });
 
   if (!respuesta.ok) {
     const payload = await respuesta.json().catch(() => ({}));
-    mostrarAlertaError('No se pudo anular', payload.mensaje || 'No tienes permiso para anular operarios.');
+    mostrarAlertaError('No se pudo eliminar', payload.mensaje || 'No tienes permiso para eliminar operarios.');
     return;
   }
 
   await cargarOperarios();
-  mostrarAlertaExito('Operario anulado', 'El operario fue anulado correctamente.');
+  mostrarAlertaExito('Operario eliminado', 'El operario fue eliminado correctamente.');
 }
 
 cargarOperarios(); // Carga inicial al abrir la pantalla

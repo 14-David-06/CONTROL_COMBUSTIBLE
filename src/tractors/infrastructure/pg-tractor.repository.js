@@ -18,7 +18,7 @@ class PgTractorRepository extends TractorRepository {
   // y ordena por número de ítem.
   async list() {
     const [filas] = await this.db.query(
-      "SELECT id,item,maquina,descripcion,centro_costo,capacidad_galones FROM tractores WHERE estado<>'ANULADO' ORDER BY item ASC,maquina ASC"
+      "SELECT id,item,maquina,descripcion,centro_costo,capacidad_galones,sin_horometro FROM tractores WHERE estado<>'ANULADO' ORDER BY item ASC,maquina ASC"
     );
     return filas;
   }
@@ -34,7 +34,7 @@ class PgTractorRepository extends TractorRepository {
   // una carga y decidir si genera alerta de sobrecapacidad.
   async findByMachine(maquina) {
     const [filas] = await this.db.query(
-      'SELECT id,item,maquina,descripcion,centro_costo,capacidad_galones FROM tractores WHERE UPPER(maquina)=UPPER(?) LIMIT 1',
+      'SELECT id,item,maquina,descripcion,centro_costo,capacidad_galones,sin_horometro FROM tractores WHERE UPPER(maquina)=UPPER(?) LIMIT 1',
       [maquina || '']
     );
     return filas[0] || null;
@@ -57,12 +57,21 @@ class PgTractorRepository extends TractorRepository {
       .trim()
       .toUpperCase();
     const capacidad_galones = Number(datos.capacidad_galones || 0); // Base para las alertas
+    const sin_horometro = Boolean(datos.sin_horometro); // true = horómetro N/A
     const [filasNuevas] = await this.db.query(
-      'INSERT INTO tractores(item,maquina,descripcion,centro_costo,capacidad_galones) VALUES(?,?,?,?,?) RETURNING id',
-      [item, maquina, descripcion, centro_costo, capacidad_galones]
+      'INSERT INTO tractores(item,maquina,descripcion,centro_costo,capacidad_galones,sin_horometro) VALUES(?,?,?,?,?,?) RETURNING id',
+      [item, maquina, descripcion, centro_costo, capacidad_galones, sin_horometro]
     );
     // Se devuelve el objeto completo para que la pantalla lo pinte sin recargar.
-    return { id: filasNuevas[0].id, item, maquina, descripcion, centro_costo, capacidad_galones };
+    return {
+      id: filasNuevas[0].id,
+      item,
+      maquina,
+      descripcion,
+      centro_costo,
+      capacidad_galones,
+      sin_horometro
+    };
   }
 
   // Edición: misma normalización que en create. El "item" no se modifica.
@@ -77,14 +86,15 @@ class PgTractorRepository extends TractorRepository {
       .trim()
       .toUpperCase();
     const capacidad_galones = Number(datos.capacidad_galones || 0);
+    const sin_horometro = Boolean(datos.sin_horometro);
     const [, resultado] = await this.db.query(
-      'UPDATE tractores SET maquina=?,descripcion=?,centro_costo=?,capacidad_galones=? WHERE id=?',
-      [maquina, descripcion, centro_costo, capacidad_galones, id]
+      'UPDATE tractores SET maquina=?,descripcion=?,centro_costo=?,capacidad_galones=?,sin_horometro=? WHERE id=?',
+      [maquina, descripcion, centro_costo, capacidad_galones, sin_horometro, id]
     );
     if (!resultado.rowCount) return null; // No existía ese id
     // Se relee la fila para devolver el dato tal como quedó guardado.
     const [filas] = await this.db.query(
-      'SELECT id,item,maquina,descripcion,centro_costo,capacidad_galones FROM tractores WHERE id=?',
+      'SELECT id,item,maquina,descripcion,centro_costo,capacidad_galones,sin_horometro FROM tractores WHERE id=?',
       [id]
     );
     return filas[0] || null;

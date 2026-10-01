@@ -87,6 +87,7 @@
             <option value="ANULAR">Anular</option>
             <option value="CAMBIAR_ROL">Cambio de rol</option>
             <option value="JUSTIFICAR">Justificar</option>
+            <option value="CIERRE_DIA">Cierre del día</option>
             <option value="CAMBIAR_CONTRASENA">Cambio de contraseña</option>
             <option value="EDITAR_AUDITORIA">Edición de auditoría</option>
             <option value="ELIMINAR_AUDITORIA">Eliminación de auditoría</option>
@@ -103,6 +104,7 @@
             <option value="registros">Registros</option>
             <option value="reportes">Reportes</option>
             <option value="alertas">Alertas</option>
+            <option value="surtidor">Surtidor</option>
             <option value="auditoria">Auditoría</option>
           </select>
         </div>
@@ -155,35 +157,21 @@
       </div>
     </section>
 
-    <!-- BLOQUE 3: TABLA DE EVENTOS CON PAGINACIÓN -->
-    <section class="panel registros" style="margin-top: 14px;">
-      <div class="titulo-tabla">
+    <!-- BLOQUE 3: EVENTOS COMO TARJETAS (igual que los registros en Tablas),
+         CON PAGINACIÓN. Cada tarjeta muestra fecha, hora, quién lo hizo y, si
+         fue una edición, qué cambió con su valor antes y después. -->
+    <section class="panel registros tarjetas-registros-panel" style="margin-top: 14px;">
+      <div class="titulo-tabla titulo-tarjetas-registros">
         <div>
           <span class="eyebrow-dashboard">HISTORIAL</span>
           <h2>Eventos registrados</h2>
         </div>
-        <div class="contador-registros"><span id="cantidad-auditoria">0</span> registros</div>
+        <div class="contador-registros"><span id="cantidad-auditoria">0</span> eventos</div>
       </div>
 
-      <!-- overflow-x:auto permite desplazar la tabla horizontalmente en celular -->
-      <div style="overflow-x:auto;">
-        <table>
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Usuario</th>
-              <th>Rol</th>
-              <th>Acción</th>
-              <th>Módulo</th>
-              <th>Registro</th> <!-- Id del elemento afectado -->
-              <th>Detalle</th> <!-- Vista previa del JSON; el resto en el tooltip -->
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <!-- Las filas las genera auditoria.js -->
-          <tbody id="tabla-auditoria"></tbody>
-        </table>
-      </div>
+      <!-- Las tarjetas las genera auditoria.js -->
+      <div id="tarjetas-auditoria" class="grid-registros-tarjetas"></div>
+      <p class="tabla-vacia" id="mensaje-auditoria-vacia" hidden>No hay eventos que coincidan con los filtros seleccionados.</p>
 
       <!-- Controles de paginación (20 eventos por página) -->
       <div class="resumen" style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
@@ -214,6 +202,6 @@
   <script src="../js/auth.js"></script>
   <script src="../js/shell.js"></script>
   <script>if (protegerVista('auditoria')) aplicarPermisosEnlaces();</script>
-  <script src="../js/auditoria.js"></script>
+  <script src="../js/auditoria.js?v=20261001-1"></script>
 </body>
 </html>

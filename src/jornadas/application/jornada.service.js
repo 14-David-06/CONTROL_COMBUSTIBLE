@@ -208,31 +208,8 @@ class JornadaService {
       if (this.alertService?.resolverPorJornada)
         await this.alertService.resolverPorJornada(jornada.id, 'cierre_pendiente', usuario, tx);
 
-      // Alerta: se cerró el día sin diligenciar el checklist de inspección.
-      const hayChecklist = CAMPOS_CHECKLIST.some((c) => {
-        const columna = {
-          fugaBiodiesel: 'fuga_biodiesel',
-          sistemaElectrico: 'sistema_electrico',
-          paradaEmergencia: 'parada_emergencia'
-        }[c];
-        return String(jornada[columna] || '').trim() !== '';
-      });
-      if (this.alertService && !hayChecklist) {
-        await this.alertService.create(
-          {
-            jornadaId: jornada.id,
-            fecha,
-            maquina: 'Cierre de día',
-            operario: null,
-            cantidad: 0,
-            capacidadGalones: 0,
-            excesoGalones: 0,
-            observaciones: 'Checklist diario sin diligenciar.',
-            tipoAlerta: 'inspeccion_pendiente'
-          },
-          tx
-        );
-      }
+      // El checklist ya no genera alerta al cerrar: es obligatorio antes de
+      // registrar cualquier suministro (ver record.service.js).
       return convertirJornadaParaFrontend(jornada);
     });
   }

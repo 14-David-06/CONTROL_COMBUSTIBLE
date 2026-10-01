@@ -1,7 +1,7 @@
 // ============================================================================
 // operator.service.js (APLICACIÓN) — REGLAS DE NEGOCIO DE OPERARIOS
 // ----------------------------------------------------------------------------
-// Igual que el de tractores: lo único con lógica propia es la anulación.
+// Lo único con lógica propia es la eliminación (ver remove()).
 // ============================================================================
 
 class OperatorService {
@@ -24,17 +24,14 @@ class OperatorService {
     return this.repository.findById(id);
   }
 
-  // ANULAR un operario: exige motivo, que exista y que no esté ya anulado.
-  async remove(id, motivo, usuario) {
-    const motivoLimpio = String(motivo || '').trim();
-    if (!motivoLimpio)
-      throw Object.assign(new Error('El motivo de anulación es obligatorio.'), { status: 400 });
+  // ELIMINAR un operario: se borra la fila (no se anula), para que la cédula
+  // quede libre también en la otra aplicación que comparte esta tabla.
+  // Los suministros ya guardados no cambian: guardan nombre y cédula como texto.
+  async remove(id) {
     const actual = await this.repository.findById(id);
     if (!actual) throw Object.assign(new Error('El operario no existe.'), { status: 404 });
-    if (actual.estado === 'ANULADO')
-      throw Object.assign(new Error('Este operario ya está anulado.'), { status: 400 });
-    await this.repository.remove(id, motivoLimpio, usuario);
-    return actual; // Estado previo, para dejarlo en la auditoría
+    await this.repository.remove(id);
+    return actual; // Datos previos, para dejarlos en la auditoría
   }
 }
 

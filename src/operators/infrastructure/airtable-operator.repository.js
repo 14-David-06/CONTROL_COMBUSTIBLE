@@ -37,20 +37,11 @@ class AirtableOperatorRepository extends OperatorRepository {
     return { id: fila.id, nombre, cedula };
   }
 
-  async remove(id, motivo, usuario) {
+  // Borra la fila del operario (no lo anula).
+  async remove(id) {
     const existente = await this.cliente.obtener(TABLA, id);
-    if (!existente || existente.estado === 'ANULADO') return false;
-    await this.cliente.actualizar(TABLA, [
-      {
-        id,
-        campos: {
-          estado: 'ANULADO',
-          motivo_anulacion: motivo || null,
-          usuario_anulacion: usuario || null,
-          fecha_anulacion: new Date().toISOString()
-        }
-      }
-    ]);
+    if (!existente) return false;
+    await this.cliente.eliminar(TABLA, [id]);
     return true;
   }
 }

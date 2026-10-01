@@ -137,6 +137,25 @@ label { color:var(--cc-texto);font-weight:700 }
 .resumen-tarjetas strong { font-size:1.4rem;color:var(--cc-texto);line-height:1 }
 .resumen-tarjetas small { font-size:.68rem;color:var(--cc-muted);text-transform:uppercase;letter-spacing:.08em }
 
+/* Auditoría: tarjetas de eventos (auditoria.js). Reutilizan .registro-tarjeta. */
+.auditoria-elemento { display:block;margin-top:3px;color:var(--cc-muted);font-size:.85rem;font-weight:700 }
+.auditoria-etiqueta { flex-shrink:0;padding:5px 10px;border-radius:999px;background:var(--cc-azul-suave);color:var(--cc-azul);font-size:.68rem;font-weight:800;letter-spacing:.06em }
+.auditoria-etiqueta.crear { background:var(--cc-verde-suave);color:var(--cc-verde-oscuro) }
+.auditoria-etiqueta.editar { background:var(--cc-amarillo-suave);color:#7f6121 }
+.auditoria-etiqueta.eliminar { background:var(--cc-rojo-suave);color:#9d3027 }
+.auditoria-cambios { display:grid;gap:8px }
+.auditoria-cambio { display:grid;gap:5px;padding:10px 12px;border:1px solid var(--cc-borde);border-radius:12px;background:#f7faf7 }
+.auditoria-campo { font-size:.72rem;font-weight:800;color:var(--cc-muted);text-transform:uppercase;letter-spacing:.05em }
+.auditoria-valores { display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-weight:700;word-break:break-word }
+.auditoria-antes { padding:3px 8px;border-radius:8px;background:var(--cc-rojo-suave);color:#9d3027;text-decoration:line-through }
+.auditoria-despues { padding:3px 8px;border-radius:8px;background:var(--cc-verde-suave);color:var(--cc-verde-oscuro) }
+.auditoria-flecha { color:var(--cc-muted) }
+.auditoria-dato { color:var(--cc-texto);font-size:.9rem;word-break:break-word }
+.auditoria-sin-cambios { margin:0;color:var(--cc-muted);font-size:.88rem }
+.tabla-detalle-auditoria { width:100%;border-collapse:collapse;font-size:.85rem }
+.tabla-detalle-auditoria th,.tabla-detalle-auditoria td { padding:8px 10px;border-bottom:1px solid var(--cc-borde);text-align:left;word-break:break-word }
+.tabla-detalle-auditoria .fila-cambiada td { background:var(--cc-amarillo-suave);font-weight:700 }
+
 /* Barra de filtros: buscador ancho + fecha + botones */
 .tarjetas-controles { display:grid!important;grid-template-columns:minmax(0,1.6fr) minmax(180px,.7fr) auto;align-items:end;gap:14px }
 .tarjetas-controles .botones-tabla { display:flex;gap:8px;flex-wrap:wrap }
