@@ -723,6 +723,9 @@ function limpiarBusquedaReporte() {
 // error de digitación o un odómetro en kilómetros.
 const HOROMETRO_NUMERICO_REPORTE = /^[0-9]+([.,][0-9]+)?$/;
 let reporteHorometrosActual = []; // Lo que se ve en la tabla (también es lo que se exporta)
+// Máquinas desplegadas por el usuario. El reporte se redibuja solo cada 10 s
+// (setInterval al final del archivo): sin esto, se cerrarían en cada actualización.
+const maquinasHorometroAbiertas = new Set();
 
 function lecturaHorometro(registro) {
   const texto = String(registro?.horometro ?? '').trim();
@@ -844,16 +847,22 @@ function renderizarReporteHorometros(registros) {
     // Detalle: una tabla con cada tanqueo, oculta hasta tocar la máquina.
     const detalle = document.createElement('tr');
     detalle.className = 'detalle-horometro';
-    detalle.hidden = true;
+    detalle.hidden = !maquinasHorometroAbiertas.has(m.maquina);
     detalle.innerHTML = `<td colspan="10"><table class="tabla-tanqueos"><thead><tr><th>Fecha</th><th>Operario</th><th>Horómetro</th><th>Galones</th><th>Horas desde el anterior</th><th>Gal/hora del tramo</th><th>Observaciones</th></tr></thead><tbody>${m.tanqueos
       .map((t) => `<tr class="${t.revisar ? 'tramo-revisar' : ''}"><td>${escapeHtml(formatearFechaReporte(t.fecha))}</td><td>${escapeHtml(t.operario || '—')}</td><td>${escapeHtml(t.horometro || '—')}</td><td>${numeroReporte(t.cantidad)}</td><td>${t.horasTramo === null ? '—' : `${numeroReporte(t.horasTramo, 1)} h${t.revisar ? ' ⚠' : ''}`}</td><td>${numeroReporte(t.galPorHoraTramo)}</td><td>${escapeHtml(t.observaciones || '')}</td></tr>`)
       .join('')}</tbody></table></td>`;
 
-    const alternar = () => {
-      detalle.hidden = !detalle.hidden;
+    const pintarFlecha = () => {
       fila.setAttribute('aria-expanded', String(!detalle.hidden));
       fila.querySelector('strong').textContent = `${detalle.hidden ? '▸' : '▾'} ${m.maquina}`;
     };
+    const alternar = () => {
+      detalle.hidden = !detalle.hidden;
+      if (detalle.hidden) maquinasHorometroAbiertas.delete(m.maquina);
+      else maquinasHorometroAbiertas.add(m.maquina);
+      pintarFlecha();
+    };
+    pintarFlecha(); // Si venía abierta de antes de la actualización, se muestra con ▾
     fila.addEventListener('click', alternar);
     fila.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alternar(); } });
     cuerpo.append(fila, detalle);
