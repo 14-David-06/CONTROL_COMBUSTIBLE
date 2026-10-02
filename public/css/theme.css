@@ -219,6 +219,11 @@ label { color:var(--cc-texto);font-weight:700 }
 .barra-analitica span { display:block;height:100%;background:var(--cc-acento);border-radius:999px } /* El ancho lo pone el JS */
 .metricas-analitica { display:flex;flex-wrap:wrap;gap:8px 14px;color:var(--cc-muted);font-size:.76rem }
 .metricas-analitica strong { color:var(--cc-texto) }
+.metricas-horometro { margin-top:6px;padding-top:8px;border-top:1px dashed var(--cc-borde) } /* Horómetro, horas y gal/hora (reportes.js) */
+.metrica-revisar { color:#9d3027 }
+.nota-grafica { margin:-4px 0 8px;color:var(--cc-muted);font-size:.78rem }
+.nota-grafica strong { color:var(--cc-texto) }
+.metrica-revisar strong { color:#9d3027 }
 @media(max-width:700px) {
   .grid-analitica-maquinas { grid-template-columns:1fr }
   .analitica-card-top { grid-template-columns:auto 1fr }

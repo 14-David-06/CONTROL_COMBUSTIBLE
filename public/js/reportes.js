@@ -155,8 +155,22 @@ async function cargarAnaliticaMaquinas(){
     const datos=await r.json();
     analiticaMaquinas.innerHTML='';
     if(!datos.length){analiticaMaquinas.innerHTML='<div class="estado-vacio-selector">No hay suficientes registros para mostrar análisis.</div>';return;}
-    const maxTotal=Math.max(...datos.map(x=>Number(x.totalGalones)||0),1); // Referencia del 100% de la barra
-    datos.slice(0,8).forEach((x,i)=>{
+    // El tanque móvil se quita ANTES de numerar y recortar: así el ranking va
+    // de #1 a #8 sin huecos y siempre se ven 8 máquinas.
+    const maquinas=datos.filter(x=>!x.esTanqueMovil&&!/^TANQUE M[OÓ][VB]IL/i.test(String(x.maquina||'')));
+    if(!maquinas.length){analiticaMaquinas.innerHTML='<div class="estado-vacio-selector">No hay suficientes registros para mostrar análisis.</div>';return;}
+    const maxTotal=Math.max(...maquinas.map(x=>Number(x.totalGalones)||0),1); // Referencia del 100% de la barra
+    // Horómetro de la máquina en el año: lecturas, horas trabajadas y galones por hora.
+    const fmt=(n,d=1)=>Number(n).toLocaleString('es-CO',{minimumFractionDigits:d,maximumFractionDigits:d});
+    const metricasHorometro=(x)=>{
+      if(x.sinHorometro)return '<span>Horómetro <strong>No aplica</strong></span>';
+      if(x.horometroInicial===null||x.horometroInicial===undefined)return '<span>Horómetro <strong>Sin lecturas</strong></span>';
+      const lecturas=`<span>Horómetro <strong>${fmt(x.horometroInicial)} → ${fmt(x.horometroFinal)}</strong></span>`;
+      if(x.lecturasInconsistentes)return `${lecturas}<span class="metrica-revisar" title="Más horas de las posibles entre la primera y la última carga: revisa las lecturas (error de digitación u odómetro en km).">⚠ <strong>Revisar lecturas</strong></span>`;
+      if(x.horasTrabajadas===null||x.horasTrabajadas===undefined)return `${lecturas}<span>Horas trabajadas <strong>— (1 lectura)</strong></span>`;
+      return `${lecturas}<span>Horas trabajadas <strong>${fmt(x.horasTrabajadas)} h</strong></span><span>Gal/hora <strong>${x.galonesPorHora===null?'—':fmt(x.galonesPorHora,2)}</strong></span>`;
+    };
+    maquinas.slice(0,8).forEach((x,i)=>{
       const card=document.createElement('article');
       // Si el consumo PROMEDIO ya llega al 85% de la capacidad del tanque, la
       // tarjeta se marca en modo advertencia (posible consumo anómalo).
@@ -166,7 +180,7 @@ async function cargarAnaliticaMaquinas(){
       const tipoMaquina=String(x.descripcion||'').trim().split(/\s+/)[0]||'';
       const tipoEtiqueta=tipoMaquina?tipoMaquina.charAt(0).toUpperCase()+tipoMaquina.slice(1).toLowerCase():'';
       card.className=`analitica-maquina-card ${estado}`;
-      if(/^TANQUE M[OÓ][VB]IL/i.test(String(x.maquina||'')))return;card.innerHTML=`<div class="analitica-card-top"><span class="ranking-analitica">#${i+1}</span><div><strong>${escapeHtml(x.maquina||'Sin máquina')}</strong><small>${x.registros} registros${tipoEtiqueta?` · <span class="badge-tipo-maquina">${escapeHtml(tipoEtiqueta)}</span>`:''}</small></div><b>${Number(x.totalGalones||0).toFixed(2)} GAL</b></div><div class="barra-analitica"><span style="width:${Math.min(100,Number(x.totalGalones||0)/maxTotal*100)}%"></span></div><div class="metricas-analitica"><span>Promedio <strong>${Number(x.promedioGalones||0).toFixed(2)} GAL</strong></span><span>Máximo <strong>${Number(x.maximoGalones||0).toFixed(2)} GAL</strong></span>${x.capacidadGalones?`<span>Tanque <strong>${Number(x.capacidadGalones).toFixed(2)} GAL</strong></span>`:''}</div>`;
+      card.innerHTML=`<div class="analitica-card-top"><span class="ranking-analitica">#${i+1}</span><div><strong>${escapeHtml(x.maquina||'Sin máquina')}</strong><small>${x.registros} registros${tipoEtiqueta?` · <span class="badge-tipo-maquina">${escapeHtml(tipoEtiqueta)}</span>`:''}</small></div><b>${Number(x.totalGalones||0).toFixed(2)} GAL</b></div><div class="barra-analitica"><span style="width:${Math.min(100,Number(x.totalGalones||0)/maxTotal*100)}%"></span></div><div class="metricas-analitica"><span>Promedio <strong>${Number(x.promedioGalones||0).toFixed(2)} GAL</strong></span><span>Máximo <strong>${Number(x.maximoGalones||0).toFixed(2)} GAL</strong></span>${x.capacidadGalones?`<span>Tanque <strong>${Number(x.capacidadGalones).toFixed(2)} GAL</strong></span>`:''}</div><div class="metricas-analitica metricas-horometro">${metricasHorometro(x)}</div>`;
       analiticaMaquinas.appendChild(card);
     });
   }catch(e){analiticaMaquinas.innerHTML='<div class="estado-vacio-selector">No se pudo cargar el análisis. Verifica la conexión con el servidor.</div>';}

@@ -208,9 +208,71 @@ class RecordService {
     return resultado;
   }
 
-  // Galones por máquina en un rango de fechas (gráficas de análisis).
-  machineConsumptionStats(inicio, fin) {
-    return this.repository.machineConsumptionStats(inicio, fin);
+  // Galones por máquina en un rango de fechas (gráficas de análisis), más los
+  // datos del horómetro en ese rango:
+  //   horometroInicial / horometroFinal: menor y mayor lectura numérica.
+  //   horasTrabajadas = final - inicial.
+  //   galonesPorHora = galones cargados DESPUÉS de la primera lectura ÷ horas.
+  //     (El combustible de la primera carga se gastó antes del periodo medido,
+  //     por eso no entra en la división.)
+  //   lecturasInconsistentes: más horas de las que caben entre la primera y la
+  //     última carga (24 h por día). Suele ser un error de digitación o un
+  //     odómetro en kilómetros: no se calcula galonesPorHora.
+  // Las máquinas sin horómetro (marcadas así en Tractores) y el tanque móvil
+  // vienen marcadas para que la pantalla las trate aparte.
+  async machineConsumptionStats(inicio, fin) {
+    const [estadisticas, registros, tractores] = await Promise.all([
+      this.repository.machineConsumptionStats(inicio, fin),
+      this.repository.findByDateRange(inicio, fin, ''),
+      this.tractorRepository.list()
+    ]);
+    const tractorDe = new Map(tractores.map((t) => [String(t.maquina || '').toUpperCase(), t]));
+
+    // Lecturas numéricas de horómetro de cada máquina, con los galones de esa carga.
+    const lecturas = new Map();
+    for (const r of registros) {
+      const texto = String(r.horometro ?? '').trim();
+      if (!HOROMETRO_NUMERICO.test(texto) || !(Number(r.cantidad) > 0)) continue;
+      const clave = String(r.maquina || '').toUpperCase();
+      if (!lecturas.has(clave)) lecturas.set(clave, []);
+      lecturas.get(clave).push({
+        horas: Number(texto.replace(',', '.')),
+        galones: Number(r.cantidad),
+        fecha: String(r.fecha || '').slice(0, 10)
+      });
+    }
+
+    const redondear = (n) => Math.round(n * 100) / 100;
+    return estadisticas.map((fila) => {
+      const clave = String(fila.maquina || '').toUpperCase();
+      const tractor = tractorDe.get(clave);
+      const sinHorometro = Boolean(tractor?.sin_horometro);
+      const tanqueMovil = esTanqueMovil(clave, tractor);
+      const lista = sinHorometro || tanqueMovil ? [] : (lecturas.get(clave) || []).sort((a, b) => a.horas - b.horas);
+      const horometroInicial = lista.length ? lista[0].horas : null;
+      const horometroFinal = lista.length ? lista[lista.length - 1].horas : null;
+      const horasTrabajadas = lista.length >= 2 ? redondear(horometroFinal - horometroInicial) : null;
+      const galonesTrabajados = lista.slice(1).reduce((total, l) => total + l.galones, 0);
+      // Días entre la primera y la última carga (contando ambos) x 24 h.
+      const fechas = lista.map((l) => l.fecha).filter(Boolean).sort();
+      const dias = fechas.length
+        ? (Date.parse(fechas[fechas.length - 1]) - Date.parse(fechas[0])) / 86400000 + 1
+        : 0;
+      const lecturasInconsistentes = horasTrabajadas !== null && horasTrabajadas > dias * 24;
+      return {
+        ...fila,
+        sinHorometro,
+        esTanqueMovil: tanqueMovil,
+        horometroInicial,
+        horometroFinal,
+        horasTrabajadas,
+        lecturasInconsistentes,
+        galonesPorHora:
+          horasTrabajadas > 0 && !lecturasInconsistentes
+            ? redondear(galonesTrabajados / horasTrabajadas)
+            : null
+      };
+    });
   }
 
   // Consulta filtrada por fechas y texto libre (pantalla de Tablas y reportes).

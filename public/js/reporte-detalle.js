@@ -61,6 +61,7 @@ let jornadasMensuales = []; // Jornadas (lecturas M1/M2 + checklist) del periodo
 let conciliacionActual = null; // Totales del surtidor vs. suministrado, calculados por el servidor
 // Referencias a las gráficas de Chart.js (hay que destruirlas antes de redibujar).
 let graficaConsumoFecha = null;
+let graficaMaquinariaFecha = null; // Solo maquinaria (sin tanque móvil ni máquinas sin horómetro)
 let graficaM1M2 = null;
 let graficaMaquinas = null;
 
@@ -84,6 +85,7 @@ const ORDEN_TIPOS_ALERTA_REPORTE = ['sobrecapacidad', 'promedio', 'horometro_irr
 let alertasDelReporte = []; // Alertas del periodo (ya filtradas)
 let registrosFiltradosActuales = []; // Lo que se está viendo ahora
 let tipoPorMaquina = {}; // Mapa máquina -> tipo (Tractor, Camión...)
+let maquinasSinHorometro = new Set(); // Marcadas "Horómetro: No aplica" en Tractores (no son maquinaria que trabaja por horas)
 
 // Textos y contenedores del bloque de gráficas.
 const subtituloGraficasReporte = document.getElementById('subtitulo-graficas-reporte');
@@ -141,6 +143,13 @@ function esTanqueMovilReporte(registro) {
   return /^TANQUE M[OÓ][VB]IL/.test(String(registro?.maquina || '').trim().toUpperCase());
 }
 
+// ¿El suministro fue a maquinaria? Se excluyen el tanque móvil y las máquinas
+// marcadas "Horómetro: No aplica" en Tractores (p. ej. control de hormiga).
+function esSuministroAMaquinaria(registro) {
+  const maquina = String(registro?.maquina || '').trim().toUpperCase();
+  return Boolean(maquina) && !esCierreDia(registro) && !esTanqueMovilReporte(registro) && !maquinasSinHorometro.has(maquina);
+}
+
 function obtenerConsumoMaquina(registro) {
   const cantidad = numeroGrafica(registro.cantidad);
 
@@ -155,10 +164,11 @@ function obtenerConsumoMaquina(registro) {
 // Chart.js exige destruir una gráfica antes de volver a dibujarla sobre el
 // mismo canvas; si no, quedan superpuestas y el tooltip se vuelve loco.
 function destruirGraficas() {
-  [graficaConsumoFecha, graficaM1M2, graficaMaquinas].forEach((grafica) => {
+  [graficaConsumoFecha, graficaMaquinariaFecha, graficaM1M2, graficaMaquinas].forEach((grafica) => {
     if (grafica) grafica.destroy();
   });
   graficaConsumoFecha = null;
+  graficaMaquinariaFecha = null;
   graficaM1M2 = null;
   graficaMaquinas = null;
 }
@@ -240,9 +250,11 @@ async function cargarTipoPorMaquina() {
     if (!respuesta.ok) return;
     const datos = await respuesta.json();
     tipoPorMaquina = {};
+    maquinasSinHorometro = new Set();
     (Array.isArray(datos) ? datos : []).forEach((x) => {
       const maquina = String(x.maquina || '').trim().toUpperCase();
       if (maquina) tipoPorMaquina[maquina] = primeraPalabraCapitalizada(x.descripcion);
+      if (maquina && x.sinHorometro) maquinasSinHorometro.add(maquina);
     });
   } catch (_) {} // Silencioso: sin este dato la columna "Tipo" dirá "Sin tipo"
 }
@@ -395,6 +407,8 @@ function actualizarGraficas(registros) {
     .filter((registro) => !esTanqueMovilReporte(registro)) // Resumen total: sin tanque móvil
     .reduce((total, registro) => total + obtenerConsumoRegistro(registro), 0);
   const consumoFechas = agruparConsumoPorFecha(lista);
+  const listaMaquinaria = lista.filter(esSuministroAMaquinaria);
+  const consumoMaquinariaFechas = agruparConsumoPorFecha(listaMaquinaria);
   const consumoMangueras = calcularConsumoM1M2(jornadasMensuales); // M1/M2 salen de las jornadas, no de los suministros
   const consumoMaquinas = agruparConsumoPorMaquina(lista);
 
@@ -449,6 +463,41 @@ function actualizarGraficas(registros) {
     },
     options: opcionesComunes
   });
+
+  // GRÁFICA 1B: igual a la 1, pero solo maquinaria (sin tanque móvil ni
+  // máquinas sin horómetro). Una sola serie: el título la nombra, sin leyenda.
+  const totalMaquinaria = listaMaquinaria.reduce((total, registro) => total + obtenerConsumoRegistro(registro), 0);
+  const totalMaquinariaGrafica = document.getElementById('total-maquinaria-grafica');
+  if (totalMaquinariaGrafica) totalMaquinariaGrafica.textContent = totalMaquinaria.toFixed(2);
+  const canvasMaquinaria = document.getElementById('grafica-maquinaria-fecha');
+  if (canvasMaquinaria) {
+    graficaMaquinariaFecha = new Chart(canvasMaquinaria, {
+      type: consumoMaquinariaFechas.length < 3 ? 'bar' : 'line',
+      data: {
+        labels: consumoMaquinariaFechas.map(([fecha]) => fecha),
+        datasets: [{
+          label: 'Galones a maquinaria',
+          data: consumoMaquinariaFechas.map(([, consumo]) => Number(consumo.toFixed(2))),
+          tension: 0.25,
+          fill: true,
+          borderColor: '#2f8f4e',
+          borderWidth: 2,
+          backgroundColor: 'rgba(47,143,78,.14)',
+          pointBackgroundColor: '#2f8f4e',
+          pointBorderColor: '#ffffff',
+          pointRadius: 4,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        ...opcionesComunes,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (contexto) => ` ${Number(contexto.parsed.y).toFixed(2)} gal a maquinaria` } }
+        }
+      }
+    });
+  }
 
   // GRÁFICA 2: cuánto salió por cada manguera del surtidor.
   graficaM1M2 = new Chart(document.getElementById('grafica-m1-m2'), {
@@ -861,7 +910,12 @@ ordenConsumoMaquina?.addEventListener('change', () => renderizarConsumoPorMaquin
 
 // Carga inicial: primero los datos, luego el mapa de tipos de máquina.
 cargarDetalleMensual();
-cargarTipoPorMaquina().then(() => renderizarConsumoPorMaquina(registrosFiltradosActuales, alertasDelReporte));
+// Al tener el mapa de máquinas se redibujan la tabla y las gráficas (la de
+// maquinaria necesita saber cuáles no tienen horómetro).
+cargarTipoPorMaquina().then(() => {
+  renderizarConsumoPorMaquina(registrosFiltradosActuales, alertasDelReporte);
+  if (registrosFiltradosActuales.length) actualizarGraficas(registrosFiltradosActuales);
+});
 
 
 // Actualiza las graficas y tablas automaticamente mientras la vista permanece abierta.

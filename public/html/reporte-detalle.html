@@ -109,13 +109,23 @@
           </div>
         </div>
 
-        <!-- Los tres <canvas> los dibuja Chart.js desde reporte-detalle.js -->
+        <!-- Los cuatro <canvas> los dibuja Chart.js desde reporte-detalle.js -->
         <div class="contenedor-graficas-reporte">
           <article class="tarjeta-grafica">
             <!-- El chip de tendencia (📈/📉/➖) aparece dentro de este título -->
             <h3 id="titulo-grafica-consumo">Consumo de combustible por fecha<span id="tendencia-consumo" class="tendencia-chip" hidden></span></h3>
             <div class="lienzo-grafica">
               <canvas id="grafica-consumo-fecha"></canvas>
+            </div>
+          </article>
+
+          <!-- Igual a la anterior, pero SOLO maquinaria: sin el tanque móvil ni las
+               máquinas marcadas "Horómetro: No aplica" en Tractores -->
+          <article class="tarjeta-grafica">
+            <h3 id="titulo-grafica-maquinaria">Suministro a maquinaria por fecha</h3>
+            <p class="nota-grafica">Sin tanque móvil ni máquinas sin horómetro · <strong><span id="total-maquinaria-grafica">0.00</span> gal</strong></p>
+            <div class="lienzo-grafica">
+              <canvas id="grafica-maquinaria-fecha" role="img" aria-label="Galones suministrados a maquinaria por fecha"></canvas>
             </div>
           </article>
 
@@ -313,6 +323,6 @@
       aplicarPermisosEnlaces();
     }
   </script>
-  <script src="../js/reporte-detalle.js"></script>
+  <script src="../js/reporte-detalle.js?v=20261002-1"></script>
 </body>
 </html>

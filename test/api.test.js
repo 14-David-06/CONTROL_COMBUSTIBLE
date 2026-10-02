@@ -643,3 +643,16 @@ test('editar un registro: solo cambian No. SAI y observaciones', async () => {
   r = await api('PUT', `/api/registros/${registro.id}`, { cantidad: 1 }, sup);
   assert.equal(r.estado, 400);
 });
+
+test('análisis por máquina: horómetro, horas trabajadas, gal/hora y máquinas sin horómetro', async () => {
+  const r = await api('GET', '/api/analitica/maquinas', undefined, admin);
+  assert.equal(r.estado, 200, JSON.stringify(r.datos));
+  const ma65 = r.datos.find((x) => x.maquina === 'MA65');
+  assert.ok(ma65.horometroFinal >= ma65.horometroInicial);
+  assert.equal(ma65.horasTrabajadas, ma65.horometroFinal - ma65.horometroInicial);
+  const bomba = r.datos.find((x) => x.maquina === 'BOMBA1');
+  assert.equal(bomba.sinHorometro, true);
+  assert.equal(bomba.horasTrabajadas, null);
+  const tanque = r.datos.find((x) => x.maquina === 'TANQUE MOVILE');
+  assert.equal(tanque.esTanqueMovil, true);
+});
