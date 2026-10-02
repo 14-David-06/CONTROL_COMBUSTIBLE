@@ -113,7 +113,7 @@
         <div class="contenedor-graficas-reporte">
           <article class="tarjeta-grafica">
             <!-- El chip de tendencia (📈/📉/➖) aparece dentro de este título -->
-            <h3 id="titulo-grafica-consumo">Consumo de combustible por fecha<span id="tendencia-consumo" class="tendencia-chip" hidden></span></h3>
+            <h3 id="titulo-grafica-consumo">Resumen general de combustible por fecha<span id="tendencia-consumo" class="tendencia-chip" hidden></span></h3>
             <div class="lienzo-grafica">
               <canvas id="grafica-consumo-fecha"></canvas>
             </div>
@@ -148,8 +148,52 @@
     </details>
 
     <!-- Tres secciones del reporte en formato de botones desplegables -->
-    <!-- (hoy son cinco: chequeo, cierres, registros, consumo y alertas) -->
+    <!-- (hoy son seis: horómetros, chequeo, cierres, registros, consumo y alertas) -->
     <section class="desplegables-reporte" aria-label="Secciones del reporte">
+      <!-- Horómetros: va DE PRIMERO en la lista (es el reporte principal).
+           TODAS las máquinas del periodo con su horómetro, horas
+           trabajadas y galones por hora; cada fila se despliega con todos sus
+           tanqueos. Lo arma reporte-detalle.js (renderizarReporteHorometros). -->
+      <details class="desplegable-reporte">
+        <summary>
+          <span class="icono-desplegable">🕒</span>
+          <span class="texto-desplegable">
+            <strong>Horómetros y consumo por hora</strong>
+            <small>Todas las máquinas, cada tanqueo, horas trabajadas y galones por hora</small>
+          </span>
+          <span class="flecha-desplegable" aria-hidden="true">⌄</span>
+        </summary>
+        <div class="contenido-desplegable">
+          <div class="titulo-tabla">
+            <div>
+              <h2>Horómetros y consumo por hora</h2>
+              <p class="nota-grafica">Toca una máquina para ver todos sus tanqueos. Gal/hora = galones cargados después de la primera lectura ÷ horas trabajadas.</p>
+            </div>
+            <button type="button" class="boton-secundario" id="boton-exportar-horometros">Exportar Excel</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="tabla-reportes tabla-horometros">
+              <thead>
+                <tr>
+                  <th>Máquina</th>
+                  <th>Tipo</th>
+                  <th>Tanqueos</th>
+                  <th>Galones</th>
+                  <th>Promedio por tanqueo</th>
+                  <th>Horómetro inicial</th>
+                  <th>Horómetro final</th>
+                  <th>Horas trabajadas</th>
+                  <th>Gal/hora</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="cuerpo-horometros"></tbody>
+            </table>
+          </div>
+          <p class="tabla-vacia" id="mensaje-horometros" hidden>No hay tanqueos de máquinas en este periodo.</p>
+        </div>
+      </details>
+
       <!-- Chequeo del reporte -->
       <!-- Un renglón por día con checklist diligenciado -->
       <details class="desplegable-reporte">
@@ -323,6 +367,6 @@
       aplicarPermisosEnlaces();
     }
   </script>
-  <script src="../js/reporte-detalle.js?v=20261002-1"></script>
+  <script src="../js/reporte-detalle.js?v=20261002-2"></script>
 </body>
 </html>

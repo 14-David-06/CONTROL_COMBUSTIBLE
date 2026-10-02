@@ -390,6 +390,7 @@ function renderizarResumenAlertasTipo(alertas) {
 function actualizarPanelesDerivados() {
   renderizarKpisReporte(registrosFiltradosActuales, alertasDelReporte);
   renderizarConsumoPorMaquina(registrosFiltradosActuales, alertasDelReporte);
+  renderizarReporteHorometros(registrosFiltradosActuales);
   renderizarResumenAlertasTipo(alertasDelReporte);
 }
 
@@ -428,7 +429,7 @@ function actualizarGraficas(registros) {
     bloqueGraficaMaquinas.hidden = true;
   } else {
     subtituloGraficasReporte.textContent = 'Vista general de todos los registros';
-    tituloGraficaConsumo.textContent = 'Consumo general de combustible por fecha';
+    tituloGraficaConsumo.textContent = 'Resumen general de combustible por fecha';
     bloqueGraficaMaquinas.hidden = false;
   }
 
@@ -711,6 +712,184 @@ function limpiarBusquedaReporte() {
 
 // Abre todas las secciones para que el PDF incluya el reporte completo.
 // Después de imprimir se restaura cómo estaban (abiertas o cerradas).
+// --- HORÓMETROS Y CONSUMO POR HORA ------------------------------------------
+// TODAS las máquinas del periodo (sin excepción), con cada tanqueo en orden.
+// Misma regla que el análisis por máquina del servidor (record.service.js):
+//   horas trabajadas = última lectura - primera lectura
+//   gal/hora = galones cargados DESPUÉS de la primera lectura ÷ horas trabajadas
+//   (la primera carga se gastó antes del periodo medido).
+// Por tanqueo: horas desde la lectura anterior y gal/hora de ese tramo.
+// "Revisar" = horas imposibles (negativas o más de 24 h por día): suele ser un
+// error de digitación o un odómetro en kilómetros.
+const HOROMETRO_NUMERICO_REPORTE = /^[0-9]+([.,][0-9]+)?$/;
+let reporteHorometrosActual = []; // Lo que se ve en la tabla (también es lo que se exporta)
+
+function lecturaHorometro(registro) {
+  const texto = String(registro?.horometro ?? '').trim();
+  return HOROMETRO_NUMERICO_REPORTE.test(texto) ? Number(texto.replace(',', '.')) : null;
+}
+
+const diasEntre = (desde, hasta) => (Date.parse(hasta) - Date.parse(desde)) / 86400000;
+
+function calcularReporteHorometros(registros) {
+  const porMaquina = new Map();
+  registros
+    .filter((r) => !esCierreDia(r) && String(r.maquina || '').trim())
+    .forEach((r) => {
+      const maquina = String(r.maquina).trim().toUpperCase();
+      if (!porMaquina.has(maquina)) porMaquina.set(maquina, []);
+      porMaquina.get(maquina).push(r);
+    });
+
+  return [...porMaquina.entries()].map(([maquina, lista]) => {
+    // Orden cronológico: fecha y luego la hora en que se registró.
+    const tanqueos = [...lista].sort((a, b) =>
+      String(a.fecha).localeCompare(String(b.fecha)) || String(a.registradoEn || '').localeCompare(String(b.registradoEn || ''))
+    );
+    const tanque = esTanqueMovilReporte({ maquina });
+    const sinHorometro = tanque || maquinasSinHorometro.has(maquina);
+    const galones = tanqueos.reduce((t, r) => t + obtenerConsumoRegistro(r), 0);
+
+    // Detalle por tanqueo con el tramo desde la lectura anterior.
+    let anterior = null; // Última lectura numérica { horas, fecha }
+    let primera = null;
+    let lecturasNumericas = 0;
+    let galonesTrabajados = 0;
+    let hayTramoImposible = false;
+    const detalle = tanqueos.map((r) => {
+      const horas = sinHorometro ? null : lecturaHorometro(r);
+      const cantidad = obtenerConsumoRegistro(r);
+      let horasTramo = null;
+      let galPorHoraTramo = null;
+      let revisar = false;
+      if (horas !== null) {
+        lecturasNumericas += 1;
+        if (anterior) {
+          horasTramo = Math.round((horas - anterior.horas) * 100) / 100;
+          const maximo = (diasEntre(anterior.fecha, r.fecha) + 1) * 24;
+          revisar = horasTramo < 0 || horasTramo > maximo;
+          if (revisar) hayTramoImposible = true;
+          else if (horasTramo > 0) galPorHoraTramo = cantidad / horasTramo;
+          galonesTrabajados += cantidad;
+        } else {
+          primera = { horas, fecha: r.fecha };
+        }
+        anterior = { horas, fecha: r.fecha };
+      }
+      return { ...r, lectura: horas, cantidad, horasTramo, galPorHoraTramo, revisar };
+    });
+
+    const horasTrabajadas = lecturasNumericas >= 2 ? Math.round((anterior.horas - primera.horas) * 100) / 100 : null;
+    let estado = 'ok';
+    if (tanque) estado = 'tanque';
+    else if (sinHorometro) estado = 'sin-horometro';
+    else if (!primera) estado = 'sin-lecturas';
+    else if (horasTrabajadas === null) estado = 'una-lectura';
+    else if (hayTramoImposible || horasTrabajadas <= 0) estado = 'revisar';
+
+    return {
+      maquina,
+      tipo: tipoPorMaquina[maquina] || 'Sin tipo',
+      tanqueos: detalle,
+      cantidadTanqueos: detalle.length,
+      galones,
+      promedio: detalle.length ? galones / detalle.length : 0,
+      horometroInicial: primera ? primera.horas : null,
+      horometroFinal: anterior ? anterior.horas : null,
+      horasTrabajadas,
+      galonesPorHora: estado === 'ok' && horasTrabajadas > 0 ? galonesTrabajados / horasTrabajadas : null,
+      estado
+    };
+  }).sort((a, b) => b.galones - a.galones);
+}
+
+const TEXTO_ESTADO_HOROMETRO = {
+  ok: '✓ OK',
+  revisar: '⚠ Revisar lecturas',
+  'sin-lecturas': 'Sin lecturas numéricas',
+  'una-lectura': 'Una sola lectura',
+  'sin-horometro': 'Sin horómetro (N/A)',
+  tanque: 'Tanque móvil (N/A)'
+};
+
+const numeroReporte = (n, decimales = 2) =>
+  n === null || n === undefined || !Number.isFinite(Number(n)) ? '—' : Number(n).toLocaleString('es-CO', { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
+
+function renderizarReporteHorometros(registros) {
+  const cuerpo = document.getElementById('cuerpo-horometros');
+  const mensaje = document.getElementById('mensaje-horometros');
+  if (!cuerpo) return;
+  reporteHorometrosActual = calcularReporteHorometros(Array.isArray(registros) ? registros : []);
+  cuerpo.innerHTML = '';
+  if (mensaje) mensaje.hidden = reporteHorometrosActual.length > 0;
+
+  reporteHorometrosActual.forEach((m) => {
+    const fila = document.createElement('tr');
+    fila.className = `fila-maquina-horometro estado-${m.estado}`;
+    fila.tabIndex = 0;
+    fila.setAttribute('aria-expanded', 'false');
+    fila.title = 'Ver todos los tanqueos de esta máquina';
+    fila.innerHTML = `
+      <td><strong>▸ ${escapeHtml(m.maquina)}</strong></td>
+      <td>${escapeHtml(m.tipo)}</td>
+      <td>${m.cantidadTanqueos}</td>
+      <td>${numeroReporte(m.galones)}</td>
+      <td>${numeroReporte(m.promedio)}</td>
+      <td>${numeroReporte(m.horometroInicial, 1)}</td>
+      <td>${numeroReporte(m.horometroFinal, 1)}</td>
+      <td>${m.horasTrabajadas === null ? '—' : `${numeroReporte(m.horasTrabajadas, 1)} h`}</td>
+      <td><strong>${numeroReporte(m.galonesPorHora)}</strong></td>
+      <td>${escapeHtml(TEXTO_ESTADO_HOROMETRO[m.estado])}</td>`;
+
+    // Detalle: una tabla con cada tanqueo, oculta hasta tocar la máquina.
+    const detalle = document.createElement('tr');
+    detalle.className = 'detalle-horometro';
+    detalle.hidden = true;
+    detalle.innerHTML = `<td colspan="10"><table class="tabla-tanqueos"><thead><tr><th>Fecha</th><th>Operario</th><th>Horómetro</th><th>Galones</th><th>Horas desde el anterior</th><th>Gal/hora del tramo</th><th>Observaciones</th></tr></thead><tbody>${m.tanqueos
+      .map((t) => `<tr class="${t.revisar ? 'tramo-revisar' : ''}"><td>${escapeHtml(formatearFechaReporte(t.fecha))}</td><td>${escapeHtml(t.operario || '—')}</td><td>${escapeHtml(t.horometro || '—')}</td><td>${numeroReporte(t.cantidad)}</td><td>${t.horasTramo === null ? '—' : `${numeroReporte(t.horasTramo, 1)} h${t.revisar ? ' ⚠' : ''}`}</td><td>${numeroReporte(t.galPorHoraTramo)}</td><td>${escapeHtml(t.observaciones || '')}</td></tr>`)
+      .join('')}</tbody></table></td>`;
+
+    const alternar = () => {
+      detalle.hidden = !detalle.hidden;
+      fila.setAttribute('aria-expanded', String(!detalle.hidden));
+      fila.querySelector('strong').textContent = `${detalle.hidden ? '▸' : '▾'} ${m.maquina}`;
+    };
+    fila.addEventListener('click', alternar);
+    fila.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alternar(); } });
+    cuerpo.append(fila, detalle);
+  });
+}
+
+// Fecha 2026-10-02 -> 02/10/2026.
+function formatearFechaReporte(fecha) {
+  const s = String(fecha || '').slice(0, 10);
+  return s.includes('-') ? s.split('-').reverse().join('/') : s;
+}
+
+// Excel: una fila por tanqueo con los totales de su máquina (tabla HTML que Excel abre).
+function exportarHorometrosExcel() {
+  const celda = (v) => `<td>${escapeHtml(v === null || v === undefined ? '' : String(v))}</td>`;
+  const num = (n, d = 2) => (n === null || n === undefined || !Number.isFinite(Number(n)) ? '' : Number(n).toFixed(d));
+  const filas = reporteHorometrosActual.flatMap((m) =>
+    m.tanqueos.map((t) => `<tr>${[
+      m.maquina, m.tipo, formatearFechaReporte(t.fecha), t.operario || '', t.horometro || '', num(t.cantidad),
+      num(t.horasTramo, 1), num(t.galPorHoraTramo), t.observaciones || '',
+      m.cantidadTanqueos, num(m.galones), num(m.promedio), num(m.horometroInicial, 1), num(m.horometroFinal, 1),
+      num(m.horasTrabajadas, 1), num(m.galonesPorHora), TEXTO_ESTADO_HOROMETRO[m.estado]
+    ].map(celda).join('')}</tr>`)
+  ).join('');
+  const encabezados = ['Máquina', 'Tipo', 'Fecha', 'Operario', 'Horómetro', 'Galones', 'Horas desde el anterior', 'Gal/hora del tramo', 'Observaciones',
+    'Tanqueos (máquina)', 'Galones (máquina)', 'Promedio por tanqueo', 'Horómetro inicial', 'Horómetro final', 'Horas trabajadas', 'Gal/hora (máquina)', 'Estado'];
+  const html = `<html><head><meta charset="UTF-8"></head><body><table><thead><tr>${encabezados.map((e) => `<th>${e}</th>`).join('')}</tr></thead><tbody>${filas}</tbody></table></body></html>`;
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+  const enlace = document.createElement('a');
+  enlace.href = URL.createObjectURL(blob);
+  enlace.download = `horometros-${esReporteGeneral ? `anual-${anioReporte}` : `${anioReporte}-${String(mesReporte).padStart(2, '0')}`}.xls`;
+  enlace.click();
+  URL.revokeObjectURL(enlace.href);
+}
+document.getElementById('boton-exportar-horometros')?.addEventListener('click', exportarHorometrosExcel);
+
 function exportarPdfReporte() {
   const secciones = [...document.querySelectorAll('.desplegable-reporte')];
   const estadosOriginales = secciones.map((seccion) => seccion.open);
@@ -914,6 +1093,7 @@ cargarDetalleMensual();
 // maquinaria necesita saber cuáles no tienen horómetro).
 cargarTipoPorMaquina().then(() => {
   renderizarConsumoPorMaquina(registrosFiltradosActuales, alertasDelReporte);
+  renderizarReporteHorometros(registrosFiltradosActuales);
   if (registrosFiltradosActuales.length) actualizarGraficas(registrosFiltradosActuales);
 });
 

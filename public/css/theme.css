@@ -223,6 +223,16 @@ label { color:var(--cc-texto);font-weight:700 }
 .metrica-revisar { color:#9d3027 }
 .nota-grafica { margin:-4px 0 8px;color:var(--cc-muted);font-size:.78rem }
 .nota-grafica strong { color:var(--cc-texto) }
+/* Reporte de horómetros (reporte-detalle.js -> renderizarReporteHorometros) */
+.fila-maquina-horometro { cursor:pointer }
+.fila-maquina-horometro:hover td,.fila-maquina-horometro:focus td { background:var(--cc-verde-suave) }
+.fila-maquina-horometro.estado-revisar td:last-child { color:#9d3027;font-weight:800 }
+.fila-maquina-horometro.estado-ok td:last-child { color:var(--cc-verde-oscuro);font-weight:800 }
+.detalle-horometro > td { background:#f7faf7;padding:10px 12px }
+.tabla-tanqueos { width:100%;border-collapse:collapse;font-size:.8rem }
+.tabla-tanqueos th { position:static;background:var(--cc-verde-suave);color:var(--cc-verde-oscuro);font-size:.68rem }
+.tabla-tanqueos th,.tabla-tanqueos td { padding:6px 8px;border-bottom:1px solid var(--cc-borde);text-align:left }
+.tabla-tanqueos .tramo-revisar td { background:var(--cc-rojo-suave) }
 .metrica-revisar strong { color:#9d3027 }
 @media(max-width:700px) {
   .grid-analitica-maquinas { grid-template-columns:1fr }
