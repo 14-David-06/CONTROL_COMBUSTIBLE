@@ -695,7 +695,12 @@ function crearPuestoRegistro(sufijo, etiqueta) {
       actualizarIndicadorCapacidad();
     }
     if (numero === 4) actualizarConfirmacion();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // La pantalla se queda en ESTE puesto: solo se mueve si su encabezado
+    // ("REGISTRO 1" / "REGISTRO 2") quedó por encima de lo visible, y en ese
+    // caso sube hasta él (no hasta el inicio de la página).
+    if (contenedorInstancia.getBoundingClientRect().top < 0) {
+      contenedorInstancia.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   // Requisitos para poder avanzar: paso 1 máquina, paso 2 operario con cédula,
@@ -871,6 +876,11 @@ function crearPuestoRegistro(sufijo, etiqueta) {
     cantidad.value = '';
     numeroSai.value = '';
     observaciones.value = '';
+    // Buscadores y resúmenes de la selección anterior, para empezar el siguiente registro limpio.
+    if (buscadorMaquina) buscadorMaquina.value = '';
+    if (buscadorOperario) buscadorOperario.value = '';
+    if (resumenMaquinaSeleccionada) resumenMaquinaSeleccionada.hidden = true;
+    if (resumenOperarioSeleccionado) resumenOperarioSeleccionado.hidden = true;
     limpiarFirma(api);
     nombreOperario.focus();
     // Se redibujan los selectores de ESTE puesto y se vuelve a su primer paso.
