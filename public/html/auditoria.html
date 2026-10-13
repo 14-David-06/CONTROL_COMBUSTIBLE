@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ==========================================================================
      auditoria.html — BITÁCORA DEL SISTEMA
-     Cuatro bloques: filtros, tarjetas de resumen, tabla paginada de eventos y
-     la ventana emergente de detalle (al final del archivo).
+     Tres bloques: filtros, TABLA paginada de eventos y PANEL DE DETALLE a la
+     derecha (en celular se abre desde abajo al tocar un evento).
      Lógica en ../js/auditoria.js. Acceso para administrador, supervisor y
      super administrador. La bitácora es de solo lectura (sin editar ni eliminar).
      ========================================================================== -->
@@ -10,8 +10,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="../css/styles.css">
-  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/styles.css?v=20261013-1">
+  <link rel="stylesheet" href="../css/theme.css?v=20261013-1">
   <title>Auditoría | Control de Combustible</title>
   <!-- App instalable (PWA): manifiesto, color de la barra y íconos -->
   <link rel="manifest" href="/manifest.webmanifest">
@@ -28,9 +28,7 @@
     <header class="encabezado encabezado-compacto">
       <div class="encabezado-control">
         <div class="logo encabezado-logo"><img src="../assets/WhatsApp Image 2026-08-11 at 6.40.45 AM.jpeg" alt="Logo Guaicaramo SAS"></div>
-        <div>
-          <h1>Auditoría</h1>
-        </div>
+        <div><span class="eyebrow-dashboard">SEGURIDAD</span><h1>Auditoría</h1></div>
       </div>
       <div class="ubicacion ubicacion-compacta">
         <strong>Barranca de Upia, Meta</strong>
@@ -41,26 +39,22 @@
       </button>
     </header>
 
-    <!-- BLOQUE 1: FILTROS DE BÚSQUEDA -->
-    <section class="panel">
-      <div class="titulo-tabla">
+    <!-- BLOQUE 1: FILTROS. Se aplican solos al cambiarlos (el buscador y el
+         usuario esperan a que se deje de escribir). -->
+    <section class="panel filtros-auditoria">
+      <div class="filtros-auditoria-titulo">
         <div>
-          <span class="eyebrow-dashboard">SEGURIDAD</span>
-          <h2>Registro de cambios y eventos</h2>
+          <h2>Registro de todas las acciones realizadas en el sistema</h2>
+          <p class="texto-secundario">Quién hizo qué, cuándo y en qué módulo.</p>
         </div>
-        <div class="botones-tabla">
-          <button type="button" class="boton-secundario" id="boton-limpiar-filtros">Limpiar filtros</button>
-          <!-- Botón de exportación DESACTIVADO. Para reactivarlo hay que quitar
-               los signos de comentario Y mover la ruta /auditoria/export por
-               encima de /auditoria/:id en auditoria.routes.js (si no, Express
-               interpreta "export" como un id). -->
-          <!-- <button type="button" id="boton-exportar-auditoria">Exportar CSV</button> -->
-        </div>
+        <span class="auditoria-solo-lectura">🔒 Solo lectura</span>
       </div>
 
-      <!-- Cinco filtros en una rejilla: rango de fechas, usuario, acción y módulo.
-           Estos se aplican al pulsar "Aplicar filtros". -->
-      <div class="formulario-usuario filtros-auditoria">
+      <div class="filtros-auditoria-fila">
+        <div class="filtro-ancho">
+          <label for="filtro-busqueda">Buscar</label>
+          <input type="search" id="filtro-busqueda" placeholder="🔎 Buscar por usuario, acción, máquina..." autocomplete="off" />
+        </div>
         <div>
           <label for="filtro-fecha-desde">Desde</label>
           <input type="date" id="filtro-fecha-desde" />
@@ -69,16 +63,20 @@
           <label for="filtro-fecha-hasta">Hasta</label>
           <input type="date" id="filtro-fecha-hasta" />
         </div>
-        <div>
+        <button type="button" class="boton-principal" id="boton-exportar-auditoria">⬇ Exportar</button>
+      </div>
+
+      <div class="filtros-auditoria-fila">
+        <div class="filtro-ancho-movil">
           <label for="filtro-usuario">Usuario</label>
-          <input type="text" id="filtro-usuario" placeholder="Nombre del usuario" />
+          <input type="text" id="filtro-usuario" placeholder="Nombre del usuario" autocomplete="off" />
         </div>
         <div>
           <label for="filtro-accion">Acción</label>
           <!-- Estos valores son los mismos que registra el backend en la
                columna "accion" (ver registrarAuditoria en cada router) -->
           <select id="filtro-accion">
-            <option value="">Todas</option>
+            <option value="">Todas las acciones</option>
             <option value="LOGIN">Login</option>
             <option value="LOGOUT">Logout</option>
             <option value="CREAR">Crear</option>
@@ -97,7 +95,7 @@
           <label for="filtro-modulo">Módulo</label>
           <!-- Un módulo por cada carpeta de src/ que registra auditoría -->
           <select id="filtro-modulo">
-            <option value="">Todos</option>
+            <option value="">Todos los módulos</option>
             <option value="usuarios">Usuarios</option>
             <option value="tractores">Máquinas</option>
             <option value="operarios">Operarios</option>
@@ -108,100 +106,57 @@
             <option value="auditoria">Auditoría</option>
           </select>
         </div>
-      </div>
-
-      <!-- Búsqueda libre: esta sí recarga la tabla mientras se escribe -->
-      <div class="formulario-usuario busqueda-auditoria">
-        <div>
-          <label for="filtro-busqueda">Búsqueda</label>
-          <input type="search" id="filtro-busqueda" placeholder="Buscar evento, usuario, módulo o detalle" />
-        </div>
-        <button type="button" class="boton-principal" id="boton-aplicar-filtros">Aplicar filtros</button>
+        <button type="button" class="boton-secundario" id="boton-limpiar-filtros">↻ Limpiar filtros</button>
       </div>
     </section>
 
-    <!-- BLOQUE 2: TARJETAS DE RESUMEN. Los cuatro números los calcula el
-         servidor sobre los filtros activos y los escribe auditoria.js. -->
-    <section class="panel resumen-dashboard" id="resumen-dashboard" style="margin-top: 14px;">
-      <div class="resumen-dashboard-card">
-        <span>📌</span>
-        <div>
-          <small>Total</small>
-          <strong id="total-eventos">0</strong>
-          <label>Eventos</label>
+    <!-- BLOQUE 2 y 3: TABLA de eventos + PANEL DE DETALLE a la derecha -->
+    <div class="auditoria-layout">
+      <section class="panel auditoria-tabla-panel">
+        <div class="auditoria-tabla-scroll">
+          <table class="tabla-auditoria">
+            <thead>
+              <tr>
+                <th>Fecha y hora</th>
+                <th>Usuario</th>
+                <th>Acción</th>
+                <th class="col-modulo">Módulo</th>
+                <th>Detalles</th>
+                <th aria-label="Ver detalle"></th>
+              </tr>
+            </thead>
+            <!-- Las filas las genera auditoria.js -->
+            <tbody id="filas-auditoria"></tbody>
+          </table>
         </div>
-      </div>
-      <div class="resumen-dashboard-card">
-        <span>👤</span>
-        <div>
-          <small>Usuarios</small>
-          <strong id="usuarios-unicos">0</strong>
-          <label>Activos</label>
-        </div>
-      </div>
-      <div class="resumen-dashboard-card">
-        <span>⚡</span>
-        <div>
-          <small>Acciones</small>
-          <strong id="acciones-unicas">0</strong>
-          <label>Distintas</label>
-        </div>
-      </div>
-      <div class="resumen-dashboard-card card-alertas">
-        <span>🧩</span>
-        <div>
-          <small>Módulos</small>
-          <strong id="modulos-unicos">0</strong>
-          <label>Con actividad</label>
-        </div>
-      </div>
-    </section>
+        <p class="tabla-vacia" id="mensaje-auditoria-vacia" hidden>No hay eventos que coincidan con los filtros seleccionados.</p>
 
-    <!-- BLOQUE 3: EVENTOS COMO TARJETAS (igual que los registros en Tablas),
-         CON PAGINACIÓN. Cada tarjeta muestra fecha, hora, quién lo hizo y, si
-         fue una edición, qué cambió con su valor antes y después. -->
-    <section class="panel registros tarjetas-registros-panel" style="margin-top: 14px;">
-      <div class="titulo-tabla titulo-tarjetas-registros">
-        <div>
-          <span class="eyebrow-dashboard">HISTORIAL</span>
-          <h2>Eventos registrados</h2>
+        <!-- Paginación numerada (20 eventos por página) -->
+        <div class="auditoria-pie">
+          <span>Mostrando <strong id="rango-registros">0</strong> registros</span>
+          <nav class="auditoria-paginas" id="paginacion-auditoria" aria-label="Páginas"></nav>
         </div>
-        <div class="contador-registros"><span id="cantidad-auditoria">0</span> eventos</div>
-      </div>
+      </section>
 
-      <!-- Las tarjetas las genera auditoria.js -->
-      <div id="tarjetas-auditoria" class="grid-registros-tarjetas"></div>
-      <p class="tabla-vacia" id="mensaje-auditoria-vacia" hidden>No hay eventos que coincidan con los filtros seleccionados.</p>
-
-      <!-- Controles de paginación (20 eventos por página) -->
-      <div class="resumen" style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
-        <span>Mostrando <strong id="rango-registros">0</strong></span>
-        <div class="botones-tabla">
-          <button type="button" class="boton-secundario" id="pagina-anterior">Anterior</button>
-          <span id="pagina-actual" style="font-weight:700; color:#f2c877; min-width: 90px; text-align: center;">Página 1</span>
-          <button type="button" class="boton-secundario" id="pagina-siguiente">Siguiente</button>
+      <!-- PANEL DE DETALLE: en computador queda fijo a la derecha; en celular
+           aparece desde abajo al tocar un evento (clase .abierto). -->
+      <aside class="panel auditoria-detalle" id="detalle-auditoria" aria-live="polite">
+        <div class="auditoria-detalle-cabecera">
+          <h2>Detalle de la auditoría</h2>
+          <button type="button" class="auditoria-detalle-x" id="cerrar-detalle-auditoria" aria-label="Cerrar detalle">✕</button>
         </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- BLOQUE 4: VENTANA DE DETALLE. Nace oculta (hidden) y auditoria.js la
-       muestra al pulsar "Ver detalle", llenando el div de contenido con el
-       comparativo antes/después del evento. -->
-  <div id="detalle-auditoria-modal" class="fondo-firma" hidden>
-    <div class="hoja-firma" style="max-width: 760px;">
-      <h2>Detalle del evento</h2>
-      <div class="confirmacion-registro" id="detalle-auditoria-contenido" style="margin-top:16px;"></div>
-      <div class="acciones-firma" style="margin-top: 18px;">
-        <button type="button" class="boton-secundario" id="cerrar-detalle-auditoria">Cerrar</button>
-      </div>
+        <div id="detalle-auditoria-contenido">
+          <p class="auditoria-detalle-vacio">Toca un evento de la tabla para ver aquí su detalle.</p>
+        </div>
+      </aside>
     </div>
-  </div>
+    <div class="auditoria-detalle-fondo" id="detalle-auditoria-fondo" hidden></div>
+  </main>
 
   <script src="/vendor/sweetalert2.all.min.js"></script>
   <script src="../js/auth.js"></script>
   <script src="../js/shell.js"></script>
   <script>if (protegerVista('auditoria')) aplicarPermisosEnlaces();</script>
-  <script src="../js/auditoria.js?v=20261001-1"></script>
+  <script src="../js/auditoria.js?v=20261013-1"></script>
 </body>
 </html>

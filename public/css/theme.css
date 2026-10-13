@@ -137,12 +137,75 @@ label { color:var(--cc-texto);font-weight:700 }
 .resumen-tarjetas strong { font-size:1.4rem;color:var(--cc-texto);line-height:1 }
 .resumen-tarjetas small { font-size:.68rem;color:var(--cc-muted);text-transform:uppercase;letter-spacing:.08em }
 
-/* Auditoría: tarjetas de eventos (auditoria.js). Reutilizan .registro-tarjeta. */
-.auditoria-elemento { display:block;margin-top:3px;color:var(--cc-muted);font-size:.85rem;font-weight:700 }
-.auditoria-etiqueta { flex-shrink:0;padding:5px 10px;border-radius:999px;background:var(--cc-azul-suave);color:var(--cc-azul);font-size:.68rem;font-weight:800;letter-spacing:.06em }
-.auditoria-etiqueta.crear { background:var(--cc-verde-suave);color:var(--cc-verde-oscuro) }
-.auditoria-etiqueta.editar { background:var(--cc-amarillo-suave);color:#7f6121 }
-.auditoria-etiqueta.eliminar { background:var(--cc-rojo-suave);color:#9d3027 }
+/* ---------------------------------------------------------------------------
+   AUDITORÍA (auditoria.html / auditoria.js): filtros, tabla de eventos y panel
+   de detalle a la derecha. En pantallas de 1100px o menos el panel se vuelve
+   una hoja que sube desde abajo; en celular la tabla oculta la columna Módulo.
+   El rol va debajo del nombre del usuario.
+   --------------------------------------------------------------------------- */
+/* Filtros */
+.filtros-auditoria-titulo { display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px }
+.filtros-auditoria-titulo h2 { margin:0;font-size:1.05rem }
+.auditoria-solo-lectura { flex-shrink:0;padding:7px 12px;border:1px solid #cfe1d1;border-radius:999px;background:var(--cc-verde-suave);color:var(--cc-verde-oscuro);font-size:.78rem;font-weight:800;white-space:nowrap }
+.filtros-auditoria-fila { display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) auto;gap:12px;align-items:end }
+.filtros-auditoria-fila + .filtros-auditoria-fila { margin-top:12px;grid-template-columns:repeat(3,minmax(0,1fr)) auto }
+.filtros-auditoria-fila label { display:block;margin-bottom:5px;font-size:.82rem }
+.filtros-auditoria-fila button { white-space:nowrap }
+
+/* Tabla + panel lado a lado */
+.auditoria-layout { display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;margin-top:14px;align-items:start }
+.auditoria-tabla-panel { padding:0!important;overflow:hidden }
+.auditoria-tabla-panel .tabla-vacia { padding:0 16px 14px }
+.auditoria-tabla-scroll { overflow-x:auto }
+.tabla-auditoria { min-width:700px!important;border-radius:0!important }
+.tabla-auditoria th,.tabla-auditoria td { text-align:left;vertical-align:middle }
+.tabla-auditoria tbody tr { cursor:pointer;transition:background .15s ease }
+.tabla-auditoria tbody tr:hover { background:#f7faf7 }
+.tabla-auditoria tbody tr.seleccionada { background:var(--cc-verde-suave);box-shadow:inset 4px 0 0 var(--cc-verde) }
+.tabla-auditoria small { display:block;margin-top:2px;color:var(--cc-muted);font-size:.78rem }
+.auditoria-fecha strong,.auditoria-fecha small { display:block;white-space:nowrap }
+.auditoria-usuario { display:flex;align-items:center;gap:9px }
+.auditoria-avatar { width:32px;height:32px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;background:var(--cc-verde-oscuro);color:#fff;font-weight:800;font-size:.85rem }
+.auditoria-modulo { display:inline-flex;align-items:center;gap:6px;white-space:nowrap }
+.auditoria-detalles { min-width:220px;max-width:340px }
+.auditoria-detalles strong { display:block;word-break:break-word }
+.auditoria-ver { min-height:34px!important;padding:0 14px!important }
+
+/* Etiquetas de acción (también en el panel) */
+.auditoria-etiqueta { display:inline-block;flex-shrink:0;padding:5px 10px;border-radius:999px;border:1px solid #c9daec;background:var(--cc-azul-suave);color:var(--cc-azul);font-size:.68rem;font-weight:800;letter-spacing:.06em;white-space:nowrap }
+.auditoria-etiqueta.crear { background:var(--cc-verde-suave);border-color:#cfe1d1;color:var(--cc-verde-oscuro) }
+.auditoria-etiqueta.editar { background:var(--cc-amarillo-suave);border-color:#e8d8a8;color:#7f6121 }
+.auditoria-etiqueta.eliminar { background:var(--cc-rojo-suave);border-color:#f0c5c1;color:#9d3027 }
+.auditoria-etiqueta.sesion { background:var(--cc-morado-suave);border-color:#dcd5f2;color:var(--cc-morado) }
+
+/* Pie: "Mostrando 1 – 20 de 246" y botones de página */
+.auditoria-pie { display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--cc-borde);color:var(--cc-muted);font-size:.88rem }
+.auditoria-paginas { display:flex;align-items:center;gap:6px;flex-wrap:wrap }
+.auditoria-paginas button { min-height:36px;min-width:36px;padding:0 10px;border:1px solid var(--cc-borde);background:var(--cc-superficie);color:var(--cc-texto);box-shadow:none }
+.auditoria-paginas button:hover:not(:disabled) { background:var(--cc-verde-suave);box-shadow:none }
+.auditoria-paginas button.actual { background:var(--cc-verde-oscuro);border-color:var(--cc-verde-oscuro);color:#fff }
+.auditoria-paginas button:disabled { opacity:.45;cursor:default }
+.auditoria-puntos { padding:0 2px;color:var(--cc-muted) }
+
+/* Panel de detalle */
+.auditoria-detalle { position:sticky;top:14px;display:grid;gap:12px }
+.auditoria-detalle-cabecera { display:flex;justify-content:space-between;align-items:center;gap:10px }
+.auditoria-detalle-cabecera h2 { margin:0;font-size:1.05rem }
+.auditoria-detalle-x { min-height:34px!important;width:34px;padding:0!important;border:1px solid var(--cc-borde);background:transparent;color:var(--cc-muted);box-shadow:none }
+.auditoria-detalle-x:hover { background:var(--cc-verde-suave)!important;box-shadow:none }
+#detalle-auditoria-contenido { display:grid;gap:12px }
+.auditoria-detalle-vacio { margin:0;padding:28px 12px;border:1px dashed var(--cc-borde);border-radius:12px;color:var(--cc-muted);text-align:center }
+.auditoria-detalle-accion { display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #cfe1d1;border-radius:12px;background:var(--cc-verde-suave) }
+.auditoria-detalle-accion > span,.auditoria-detalle-linea > span { font-size:1.15rem;line-height:1.3 }
+.auditoria-detalle-accion strong { display:block;color:var(--cc-verde-oscuro) }
+.auditoria-detalle-accion small { display:block;margin-top:2px;color:var(--cc-muted);font-size:.8rem }
+.auditoria-detalle-linea { display:flex;align-items:flex-start;gap:10px }
+.auditoria-detalle-linea small { display:block;color:var(--cc-muted);font-size:.75rem }
+.auditoria-detalle-linea strong { display:block;font-size:.92rem;word-break:break-word }
+.auditoria-detalle-subtitulo { margin:4px 0 0;font-size:.9rem }
+.auditoria-detalle-fondo { display:none }
+
+/* Lista "campo: antes → después" del panel */
 .auditoria-cambios { display:grid;gap:8px }
 .auditoria-cambio { display:grid;gap:5px;padding:10px 12px;border:1px solid var(--cc-borde);border-radius:12px;background:#f7faf7 }
 .auditoria-campo { font-size:.72rem;font-weight:800;color:var(--cc-muted);text-transform:uppercase;letter-spacing:.05em }
@@ -152,9 +215,23 @@ label { color:var(--cc-texto);font-weight:700 }
 .auditoria-flecha { color:var(--cc-muted) }
 .auditoria-dato { color:var(--cc-texto);font-size:.9rem;word-break:break-word }
 .auditoria-sin-cambios { margin:0;color:var(--cc-muted);font-size:.88rem }
-.tabla-detalle-auditoria { width:100%;border-collapse:collapse;font-size:.85rem }
-.tabla-detalle-auditoria th,.tabla-detalle-auditoria td { padding:8px 10px;border-bottom:1px solid var(--cc-borde);text-align:left;word-break:break-word }
-.tabla-detalle-auditoria .fila-cambiada td { background:var(--cc-amarillo-suave);font-weight:700 }
+
+@media (max-width:1100px) {
+  .auditoria-layout { grid-template-columns:minmax(0,1fr) } /* minmax: la tabla ancha no estira la página */
+  .filtros-auditoria-fila,.filtros-auditoria-fila + .filtros-auditoria-fila { grid-template-columns:repeat(2,minmax(0,1fr)) }
+  .filtros-auditoria-fila .filtro-ancho,.filtros-auditoria-fila .filtro-ancho-movil,.filtros-auditoria-fila button { grid-column:1 / -1 }
+  /* El panel pasa a ser una hoja que sube desde abajo */
+  .auditoria-detalle { position:fixed;top:auto;left:0;right:0;bottom:0;z-index:60;max-height:82vh;overflow-y:auto;margin:0;border-radius:20px 20px 0 0!important;transform:translateY(105%);transition:transform .25s ease }
+  .auditoria-detalle.abierto { transform:none }
+  .auditoria-detalle-fondo:not([hidden]) { display:block;position:fixed;inset:0;z-index:55;background:rgba(15,30,22,.45) }
+}
+@media (max-width:700px) {
+  .tabla-auditoria { min-width:520px!important }
+  .tabla-auditoria .col-modulo { display:none }
+}
+@media (max-width:480px) {
+  .filtros-auditoria-titulo { flex-direction:column }
+}
 
 /* Barra de filtros: buscador ancho + fecha + botones */
 .tarjetas-controles { display:grid!important;grid-template-columns:minmax(0,1.6fr) minmax(180px,.7fr) auto;align-items:end;gap:14px }

@@ -867,17 +867,6 @@ body.con-shell { padding: 0; }
   .bottom-nav .bn-badge { position: absolute; top: 0; right: 2px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 8.5px; font-weight: 900; display: grid; place-items: center; }
 }
 
-/* Auditoría: rejilla de filtros responsiva. Antes el número de columnas estaba
-   escrito en línea (5 x 150px) y en celular ensanchaba toda la página. */
-.formulario-usuario.filtros-auditoria { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.formulario-usuario.busqueda-auditoria { grid-template-columns: 1fr auto; margin-top: 12px; }
-@media (max-width: 1100px) { .formulario-usuario.filtros-auditoria { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 720px) {
-  .formulario-usuario.filtros-auditoria { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .formulario-usuario.busqueda-auditoria { grid-template-columns: 1fr; }
-}
-@media (max-width: 420px) { .formulario-usuario.filtros-auditoria { grid-template-columns: 1fr; } }
-
 /* --- Jornada: indicador de borrador y avisos de cierre pendiente ------------ */
 .estado-borrador { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 700; color: #5a6b62; }
 .estado-borrador.correcto { color: #1f7a45; }

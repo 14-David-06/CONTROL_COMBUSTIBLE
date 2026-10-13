@@ -2,11 +2,10 @@
 // auditoria.js — PANTALLA DE AUDITORÍA (public/html/auditoria.html)
 // ----------------------------------------------------------------------------
 // Consulta la bitácora del sistema: quién hizo qué, cuándo y en qué módulo.
-// Incluye filtros (fechas, usuario, acción, módulo, búsqueda libre), tarjetas
-// de resumen, paginación y ventana de detalle.
-// Cada evento se muestra como una TARJETA (igual que los registros en Tablas)
-// con fecha, hora, quién lo hizo y, si fue una edición, qué campos cambiaron
-// con su valor ANTES y DESPUÉS.
+// Incluye filtros (fechas, usuario, acción, módulo, búsqueda libre), una
+// TABLA paginada y un PANEL DE DETALLE a la derecha (en celular se abre desde
+// abajo). Si el evento fue una edición, el detalle muestra qué campos
+// cambiaron con su valor ANTES y DESPUÉS.
 // La bitácora es de solo lectura: no se pueden modificar ni eliminar eventos.
 // ============================================================================
 
@@ -15,22 +14,19 @@ const estadoAuditoria = {
   page: 1,
   limit: 20, // Eventos por página (el backend admite hasta 100)
   totalPages: 1,
-  total: 0
+  total: 0,
+  seleccionado: null // Id del evento abierto en el panel de detalle
 };
 
 // Elementos de la interfaz.
-const modalDetalle = document.getElementById('detalle-auditoria-modal'); // Ventana emergente
-const contenidoDetalle = document.getElementById('detalle-auditoria-contenido');
-const tarjetasAuditoria = document.getElementById('tarjetas-auditoria'); // Contenedor de tarjetas
+const filasAuditoria = document.getElementById('filas-auditoria'); // <tbody> de la tabla
 const mensajeAuditoriaVacia = document.getElementById('mensaje-auditoria-vacia');
-const cantidadAuditoria = document.getElementById('cantidad-auditoria');
 const rangoRegistros = document.getElementById('rango-registros');
-const paginaActual = document.getElementById('pagina-actual');
-// Tarjetas de resumen superiores.
-const totalEventos = document.getElementById('total-eventos');
-const usuariosUnicos = document.getElementById('usuarios-unicos');
-const accionesUnicas = document.getElementById('acciones-unicas');
-const modulosUnicos = document.getElementById('modulos-unicos');
+const paginacion = document.getElementById('paginacion-auditoria');
+const panelDetalle = document.getElementById('detalle-auditoria');
+const fondoDetalle = document.getElementById('detalle-auditoria-fondo'); // Sombra detrás del panel en celular
+const contenidoDetalle = document.getElementById('detalle-auditoria-contenido');
+const DETALLE_VACIO = contenidoDetalle.innerHTML; // Texto inicial "Toca un evento..."
 
 // Campos del formulario de filtros, agrupados para recorrerlos con facilidad.
 const formFields = {
@@ -41,6 +37,7 @@ const formFields = {
   modulo: document.getElementById('filtro-modulo'),
   busqueda: document.getElementById('filtro-busqueda')
 };
+
 
 // --- Textos legibles ---------------------------------------------------------
 // Qué se hizo, en palabras (las claves son las que guarda el backend en "accion").
@@ -269,67 +266,102 @@ function htmlDatos(campos) {
     .join('')}</div>`;
 }
 
-// Construye la tarjeta de un evento.
-function crearTarjetaAuditoria(registro) {
+
+// --- Tabla -------------------------------------------------------------------
+// Ícono y nombre corto de cada módulo para la columna "Módulo".
+const MODULO_TABLA = {
+  registros: ['⛽', 'Registros'],
+  tractores: ['🚜', 'Máquinas'],
+  operarios: ['👷', 'Operarios'],
+  usuarios: ['👤', 'Usuarios'],
+  alertas: ['🔔', 'Alertas'],
+  reportes: ['📊', 'Reportes'],
+  surtidor: ['🛢️', 'Surtidor'],
+  jornadas: ['📅', 'Jornadas'],
+  auditoria: ['🛡️', 'Auditoría']
+};
+// Rol legible: "super_administrador" -> "Super administrador".
+const nombreRol = (rol) => {
+  const texto = String(rol || '').replace(/_/g, ' ').trim();
+  return texto ? texto.charAt(0).toUpperCase() + texto.slice(1) : '—';
+};
+const moduloTabla = (modulo) => MODULO_TABLA[modulo] || ['🧩', modulo || '—'];
+// Clase de color de la etiqueta; inicio y cierre de sesión van en morado.
+const claseAccion = (accion) => CLASE_ACCION[accion] || (['LOGIN', 'LOGOUT'].includes(accion) ? 'sesion' : '');
+
+// Texto corto de la columna "Detalles": qué se hizo y, si fue una edición,
+// el primer cambio (los demás se ven en el panel de detalle).
+function resumenDetalles(evento) {
+  let segunda = '';
+  if (evento.tipo === 'cambios' && evento.cambios.length) {
+    const c = evento.cambios[0];
+    const mas = evento.cambios.length > 1 ? ` (+${evento.cambios.length - 1} más)` : '';
+    segunda = `${c.campo}: ${formatearValor(c.antes)} → ${formatearValor(c.despues)}${mas}`;
+  } else if (evento.detalle.motivo) {
+    segunda = `Motivo: ${evento.detalle.motivo}`;
+  }
+  return `<strong>${escapeHtml(evento.titulo)}${evento.elemento ? ` · ${escapeHtml(evento.elemento)}` : ''}</strong>${
+    segunda ? `<small>${escapeHtml(segunda)}</small>` : ''
+  }`;
+}
+
+// Construye la fila de un evento. Toda la fila abre el detalle.
+function crearFilaAuditoria(registro) {
   const evento = interpretarEvento(registro);
   const { dia, hora } = partesFecha(registro.fecha || registro.creado_en);
   const accion = String(registro.accion || '').toUpperCase();
-  const tarjeta = document.createElement('article');
-  tarjeta.className = 'registro-tarjeta tarjeta-auditoria';
+  const usuario = registro.usuario || 'Sistema';
+  const [icono, modulo] = moduloTabla(registro.modulo);
+  const fila = document.createElement('tr');
+  fila.tabIndex = 0;
+  fila.dataset.id = registro.id;
+  if (String(registro.id) === String(estadoAuditoria.seleccionado)) fila.classList.add('seleccionada');
 
-  let cuerpo = '';
-  if (evento.tipo === 'cambios') {
-    cuerpo = `<span class="eyebrow-dashboard">QUÉ CAMBIÓ · ANTES → DESPUÉS</span>${htmlCambios(evento.cambios)}`;
-  } else if (evento.campos.length) {
-    cuerpo = `<span class="eyebrow-dashboard">${escapeHtml(evento.etiqueta.toUpperCase())}</span>${htmlDatos(evento.campos)}`;
-  }
-
-  tarjeta.innerHTML = `
-    <div class="registro-tarjeta-cabecera">
-      <div>
-        <span class="badge-registro-fecha">📅 ${escapeHtml(dia)} · 🕒 ${escapeHtml(hora)}</span>
-        <h3>${escapeHtml(evento.titulo)}${evento.elemento ? ` <small class="auditoria-elemento">${escapeHtml(evento.elemento)}</small>` : ''}</h3>
-        <p>👤 ${escapeHtml(registro.usuario || 'Sistema')} · ${escapeHtml(registro.rol || '—')}</p>
-      </div>
-      <span class="auditoria-etiqueta ${CLASE_ACCION[accion] || ''}">${escapeHtml(accion || '—')}</span>
-    </div>
-    ${cuerpo}
-    <div class="acciones-tarjeta-registro">
-      <button type="button" class="boton-secundario">🔎 Ver detalle</button>
-    </div>`;
+  fila.innerHTML = `
+    <td class="auditoria-fecha"><strong>${escapeHtml(dia)}</strong><small>${escapeHtml(hora)}</small></td>
+    <td><div class="auditoria-usuario"><span class="auditoria-avatar" aria-hidden="true">${escapeHtml(usuario.charAt(0).toUpperCase())}</span><div><strong>${escapeHtml(usuario)}</strong><small>${escapeHtml(nombreRol(registro.rol))}</small></div></div></td>
+    <td><span class="auditoria-etiqueta ${claseAccion(accion)}">${escapeHtml(accion.replace(/_/g, ' ') || '—')}</span></td>
+    <td class="col-modulo"><span class="auditoria-modulo"><span aria-hidden="true">${icono}</span>${escapeHtml(modulo)}</span></td>
+    <td class="auditoria-detalles">${resumenDetalles(evento)}</td>
+    <td><button type="button" class="boton-secundario auditoria-ver">Ver</button></td>`;
 
   // El id se pasa tal cual: en Airtable es un texto ("rec..."), no un número.
-  tarjeta.querySelector('button').addEventListener('click', () => abrirDetalleAuditoria(registro.id));
-  return tarjeta;
+  const abrir = () => mostrarDetalle(registro, fila);
+  fila.addEventListener('click', abrir);
+  fila.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') abrir();
+  });
+  return fila;
 }
 
-// Llena las cuatro tarjetas de resumen con los totales que calcula el servidor.
-function renderResumen(resumen = {}) {
-  totalEventos.textContent = Number(resumen.total_eventos || 0);
-  usuariosUnicos.textContent = Number(resumen.usuarios_unicos || 0);
-  accionesUnicas.textContent = Number(resumen.acciones_unicas || 0);
-  modulosUnicos.textContent = Number(resumen.modulos_unicos || 0);
-}
-
-// Actualiza el indicador de página y habilita/deshabilita los botones.
+// Botones de página: siempre la primera, la última y las vecinas de la actual,
+// con "…" en los huecos. Ej.: ‹ 1 2 3 … 13 ›
 function renderPaginacion(page, totalPages) {
   // Se acota la página entre 1 y el total, por si llega un valor fuera de rango.
-  estadoAuditoria.page = Math.min(Math.max(1, Number(page) || 1), Math.max(1, Number(totalPages) || 1));
   estadoAuditoria.totalPages = Math.max(1, Number(totalPages) || 1);
-  paginaActual.textContent = `Página ${estadoAuditoria.page} de ${estadoAuditoria.totalPages}`;
-  document.getElementById('pagina-anterior').disabled = estadoAuditoria.page <= 1;
-  document.getElementById('pagina-siguiente').disabled = estadoAuditoria.page >= estadoAuditoria.totalPages;
+  estadoAuditoria.page = Math.min(Math.max(1, Number(page) || 1), estadoAuditoria.totalPages);
+  const { page: actual, totalPages: total } = estadoAuditoria;
+
+  const numeros = [...new Set([1, actual - 1, actual, actual + 1, total])]
+    .filter((n) => n >= 1 && n <= total)
+    .sort((a, b) => a - b);
+  const botones = [`<button type="button" data-pagina="${actual - 1}" aria-label="Página anterior" ${actual <= 1 ? 'disabled' : ''}>‹</button>`];
+  numeros.forEach((n, i) => {
+    if (i && n - numeros[i - 1] > 1) botones.push('<span class="auditoria-puntos">…</span>');
+    botones.push(`<button type="button" data-pagina="${n}" class="${n === actual ? 'actual' : ''}" ${n === actual ? 'aria-current="page"' : ''}>${n}</button>`);
+  });
+  botones.push(`<button type="button" data-pagina="${actual + 1}" aria-label="Página siguiente" ${actual >= total ? 'disabled' : ''}>›</button>`);
+  paginacion.innerHTML = botones.join('');
 }
 
-// Dibuja las tarjetas de los eventos recibidos.
-function renderTarjetas(registros) {
+// Dibuja las filas de los eventos recibidos.
+function renderTabla(registros) {
   const lista = Array.isArray(registros) ? registros : [];
-  tarjetasAuditoria.innerHTML = '';
+  filasAuditoria.innerHTML = '';
   mensajeAuditoriaVacia.hidden = lista.length > 0;
-  cantidadAuditoria.textContent = String(estadoAuditoria.total);
   const desde = lista.length ? (estadoAuditoria.page - 1) * estadoAuditoria.limit + 1 : 0;
-  rangoRegistros.textContent = lista.length ? `${desde}–${desde + lista.length - 1} de ${estadoAuditoria.total}` : '0';
-  lista.forEach((registro) => tarjetasAuditoria.appendChild(crearTarjetaAuditoria(registro)));
+  rangoRegistros.textContent = lista.length ? `${desde} – ${desde + lista.length - 1} de ${estadoAuditoria.total}` : '0';
+  lista.forEach((registro) => filasAuditoria.appendChild(crearFilaAuditoria(registro)));
 }
 
 // Descarga la página actual de eventos aplicando los filtros vigentes.
@@ -344,61 +376,70 @@ async function cargarAuditoria() {
 
     const datos = await respuesta.json();
     estadoAuditoria.total = Number(datos.total || 0);
-    renderResumen(datos.resumen || {});
     renderPaginacion(datos.page || 1, datos.totalPages || 1);
-    renderTarjetas(datos.registros || []);
+    renderTabla(datos.registros || []);
   } catch (error) {
     console.error(error);
     estadoAuditoria.total = 0;
-    renderTarjetas([]);
+    renderPaginacion(1, 1);
+    renderTabla([]);
     mostrarAlertaError('No se pudo cargar la auditoría', error.message);
   }
 }
 
-// Ventana de detalle de un evento: quién, cuándo, qué, y la tabla completa
-// campo por campo (antes / después) o los datos del evento.
-async function abrirDetalleAuditoria(id) {
-  try {
-    const respuesta = await fetch(`/api/auditoria/${encodeURIComponent(id)}`, { cache: 'no-store' });
-    if (!respuesta.ok) throw new Error('No se pudo obtener el detalle.');
-    const item = await respuesta.json();
-    const evento = interpretarEvento(item);
-    const detalle = evento.detalle;
-    const { dia, hora } = partesFecha(item.creado_en || item.fecha);
+// --- Panel de detalle --------------------------------------------------------
+// Una línea "ícono · rótulo · valor" del panel.
+const lineaDetalle = (icono, rotulo, valorHtml) =>
+  `<div class="auditoria-detalle-linea"><span aria-hidden="true">${icono}</span><div><small>${escapeHtml(rotulo)}</small><strong>${valorHtml}</strong></div></div>`;
 
-    // Edición: todos los campos enviados, marcando los que cambiaron.
-    let tabla = '';
-    if (detalle.antes && detalle.despues) {
-      const valoresAntes = new Map(Object.entries(detalle.antes).map(([c, v]) => [normalizarClave(c), v]));
-      const filas = Object.entries(detalle.despues)
-        .filter(([clave]) => !CAMPOS_OCULTOS.has(normalizarClave(clave)))
-        .map(([clave, valor]) => {
-          const anterior = valoresAntes.get(normalizarClave(clave));
-          const cambio = !mismoValor(anterior, valor);
-          return `<tr class="${cambio ? 'fila-cambiada' : ''}"><td>${escapeHtml(nombreCampo(clave))}</td><td>${escapeHtml(formatearValor(anterior))}</td><td>${escapeHtml(formatearValor(valor))}</td><td>${cambio ? '✏ Cambió' : 'Igual'}</td></tr>`;
-        })
-        .join('');
-      tabla = `<table class="tabla-detalle-auditoria"><thead><tr><th>Campo</th><th>Antes</th><th>Después</th><th></th></tr></thead><tbody>${filas || '<tr><td colspan="4">Sin campos</td></tr>'}</tbody></table>`;
-    } else if (evento.campos.length) {
-      tabla = `<table class="tabla-detalle-auditoria"><thead><tr><th>Campo</th><th>Valor</th></tr></thead><tbody>${evento.campos
-        .map((c) => `<tr><td>${escapeHtml(c.campo)}</td><td>${escapeHtml(formatearValor(c.valor))}</td></tr>`)
-        .join('')}</tbody></table>`;
-    }
+// Llena el panel con el evento elegido. Los datos ya vienen en la lista, así
+// que no hace falta volver a pedirlos al servidor.
+function mostrarDetalle(registro, fila) {
+  estadoAuditoria.seleccionado = registro.id;
+  filasAuditoria.querySelectorAll('tr.seleccionada').forEach((tr) => tr.classList.remove('seleccionada'));
+  fila?.classList.add('seleccionada');
 
-    contenidoDetalle.innerHTML = `
-      <div class="confirmacion-linea"><span>📝</span><div><small>Acción</small><strong>${escapeHtml(evento.titulo)}</strong><em>${escapeHtml(evento.elemento || item.modulo || '—')}</em></div></div>
-      <div class="confirmacion-linea"><span>👤</span><div><small>Quién</small><strong>${escapeHtml(item.usuario || 'Sistema')}</strong><em>${escapeHtml(item.rol || '—')}</em></div></div>
-      <div class="confirmacion-linea"><span>🕒</span><div><small>Cuándo</small><strong>${escapeHtml(dia)}</strong><em>${escapeHtml(hora)}</em></div></div>
-      <div class="confirmacion-linea"><span>🧩</span><div><small>Módulo</small><strong>${escapeHtml(item.modulo || '—')}</strong><em>Id: ${escapeHtml(item.registro_id || '—')}</em></div></div>
-      ${detalle.motivo ? `<div class="confirmacion-linea" style="grid-column:1 / -1;"><span>💬</span><div><small>Motivo</small><strong>${escapeHtml(detalle.motivo)}</strong></div></div>` : ''}
-      <div style="grid-column:1 / -1; width:100%; overflow-x:auto;">${tabla || '<p class="auditoria-sin-cambios">Este evento no guarda datos adicionales.</p>'}</div>
-    `;
-    modalDetalle.hidden = false; // Muestra la ventana
-  } catch (error) {
-    mostrarAlertaError('Detalle no disponible', error.message);
+  const evento = interpretarEvento(registro);
+  const detalle = evento.detalle;
+  const accion = String(registro.accion || '').toUpperCase();
+  const { dia, hora } = partesFecha(registro.fecha || registro.creado_en);
+  const [icono, modulo] = moduloTabla(registro.modulo);
+  const afectado = [evento.elemento, registro.registro_id ? `Id: ${registro.registro_id}` : ''].filter(Boolean).join(' · ');
+
+  let cuerpo = '';
+  if (evento.tipo === 'cambios') {
+    cuerpo = `<h3 class="auditoria-detalle-subtitulo">✏️ Cambios realizados</h3>${htmlCambios(evento.cambios)}`;
+  } else if (evento.campos.length) {
+    cuerpo = `<h3 class="auditoria-detalle-subtitulo">📋 ${escapeHtml(evento.etiqueta)}</h3>${htmlDatos(evento.campos)}`;
   }
+
+  contenidoDetalle.innerHTML = `
+    <div class="auditoria-detalle-accion">
+      <span aria-hidden="true">📝</span>
+      <div><strong>${escapeHtml(evento.titulo)}</strong><small>${escapeHtml(dia)} · ${escapeHtml(hora)}</small></div>
+    </div>
+    ${lineaDetalle('👤', 'Usuario', escapeHtml(registro.usuario || 'Sistema'))}
+    ${lineaDetalle('🎖️', 'Rol', escapeHtml(nombreRol(registro.rol)))}
+    ${lineaDetalle('⚡', 'Acción', `<span class="auditoria-etiqueta ${claseAccion(accion)}">${escapeHtml(accion.replace(/_/g, ' ') || '—')}</span>`)}
+    ${lineaDetalle(icono, 'Módulo', escapeHtml(modulo))}
+    ${afectado ? lineaDetalle('📄', 'Registro afectado', escapeHtml(afectado)) : ''}
+    ${detalle.motivo ? lineaDetalle('💬', 'Motivo', escapeHtml(detalle.motivo)) : ''}
+    ${cuerpo}`;
+
+  panelDetalle.classList.add('abierto'); // En celular lo sube desde abajo
+  fondoDetalle.hidden = false;
 }
 
+// Cierra el panel y vuelve al texto inicial.
+function cerrarDetalle() {
+  estadoAuditoria.seleccionado = null;
+  filasAuditoria.querySelectorAll('tr.seleccionada').forEach((tr) => tr.classList.remove('seleccionada'));
+  contenidoDetalle.innerHTML = DETALLE_VACIO;
+  panelDetalle.classList.remove('abierto');
+  fondoDetalle.hidden = true;
+}
+
+// --- Filtros y eventos -------------------------------------------------------
 // Vacía todos los filtros y vuelve a la primera página.
 function limpiarFiltros() {
   Object.values(formFields).forEach((campo) => {
@@ -408,13 +449,27 @@ function limpiarFiltros() {
   cargarAuditoria();
 }
 
+// Recarga desde la página 1 (se usa cada vez que cambia un filtro).
+function aplicarFiltros() {
+  estadoAuditoria.page = 1;
+  cargarAuditoria();
+}
+
 // Conecta todos los botones y campos de la pantalla.
 function registrarEventos() {
-  // Aplicar filtros: siempre se vuelve a la página 1.
-  document.getElementById('boton-aplicar-filtros')?.addEventListener('click', () => {
-    estadoAuditoria.page = 1;
-    cargarAuditoria();
-  });
+  // Fechas, acción y módulo: se aplican al cambiarlos.
+  [formFields.desde, formFields.hasta, formFields.accion, formFields.modulo].forEach((campo) =>
+    campo?.addEventListener('change', aplicarFiltros)
+  );
+  // Buscador y usuario: esperan 350 ms después de la última tecla, para no
+  // consultar al servidor con cada letra.
+  let espera = null;
+  [formFields.busqueda, formFields.usuario].forEach((campo) =>
+    campo?.addEventListener('input', () => {
+      clearTimeout(espera);
+      espera = setTimeout(aplicarFiltros, 350);
+    })
+  );
 
   document.getElementById('boton-limpiar-filtros')?.addEventListener('click', limpiarFiltros);
   // Exportar CSV: se navega al endpoint con los mismos filtros y el navegador
@@ -424,39 +479,19 @@ function registrarEventos() {
     window.location.href = `/api/auditoria/export?${query}`;
   });
 
-  // Paginación.
-  document.getElementById('pagina-anterior')?.addEventListener('click', () => {
-    if (estadoAuditoria.page > 1) {
-      estadoAuditoria.page -= 1;
-      cargarAuditoria();
-    }
-  });
-
-  document.getElementById('pagina-siguiente')?.addEventListener('click', () => {
-    if (estadoAuditoria.page < estadoAuditoria.totalPages) {
-      estadoAuditoria.page += 1;
-      cargarAuditoria();
-    }
-  });
-
-  // Cierre de la ventana de detalle: con el botón, con Escape o haciendo clic fuera del cuadro.
-  document.getElementById('cerrar-detalle-auditoria')?.addEventListener('click', () => {
-    modalDetalle.hidden = true;
-  });
-
-  document.addEventListener('keydown', (evento) => {
-    if (evento.key === 'Escape' && modalDetalle && !modalDetalle.hidden) modalDetalle.hidden = true;
-  });
-
-  modalDetalle?.addEventListener('click', (evento) => {
-    if (evento.target === modalDetalle) modalDetalle.hidden = true; // Solo si se pulsó el fondo
-  });
-
-  // La búsqueda libre recarga sola al escribir; los demás filtros esperan al
-  // botón "Aplicar filtros".
-  formFields.busqueda?.addEventListener('input', () => {
-    estadoAuditoria.page = 1;
+  // Paginación: cada botón trae en data-pagina la página a la que lleva.
+  paginacion.addEventListener('click', (e) => {
+    const boton = e.target.closest('button[data-pagina]');
+    if (!boton || boton.disabled) return;
+    estadoAuditoria.page = Number(boton.dataset.pagina);
     cargarAuditoria();
+  });
+
+  // Cierre del panel de detalle: con la X, con Escape o tocando el fondo (celular).
+  document.getElementById('cerrar-detalle-auditoria')?.addEventListener('click', cerrarDetalle);
+  fondoDetalle.addEventListener('click', cerrarDetalle);
+  document.addEventListener('keydown', (evento) => {
+    if (evento.key === 'Escape' && estadoAuditoria.seleccionado !== null) cerrarDetalle();
   });
 }
 
