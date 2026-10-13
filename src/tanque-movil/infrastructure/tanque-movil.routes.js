@@ -1,7 +1,7 @@
 // ============================================================================
 // tanque-movil.routes.js (INFRAESTRUCTURA) — ENDPOINTS DEL TANQUE MÓVIL
 // ----------------------------------------------------------------------------
-//   GET    /api/tanque-movil?fecha=YYYY-MM-DD -> cuadre y entregas del día
+//   GET    /api/tanque-movil?fecha=YYYY-MM-DD -> entregas del día y su total
 //   POST   /api/tanque-movil                  -> registrar una entrega
 //   PUT    /api/tanque-movil/:id              -> corregir una entrega
 //   DELETE /api/tanque-movil/:id              -> anular (requiere motivo)

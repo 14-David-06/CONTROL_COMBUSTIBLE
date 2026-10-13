@@ -2,9 +2,8 @@
 <!-- ==========================================================================
      tanque-movil.html — ENTREGAS DEL TANQUE MÓVIL (solo supervisor)
      El supervisor pasa la planilla del tanque móvil: qué máquina recibió
-     cuántos galones en el campo. Arriba, el cuadre del día (cargado al móvil
-     desde el tanque principal, repartido y saldo). No toca la jornada, las
-     lecturas M1/M2 ni el cierre del tanque principal.
+     cuántos galones en el campo. Funciona como el registro del tanque
+     principal pero sin lecturas iniciales ni cierre.
      Lógica en ../js/tanque-movil.js. Requiere el permiso 'tanque_movil'.
      ========================================================================== -->
 <html lang="es">
@@ -12,7 +11,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/styles.css?v=20261013-2">
-  <link rel="stylesheet" href="../css/theme.css?v=20261013-4">
+  <link rel="stylesheet" href="../css/theme.css?v=20261013-5">
   <title>Tanque móvil</title>
   <!-- App instalable (PWA): manifiesto, color de la barra y íconos -->
   <link rel="manifest" href="/manifest.webmanifest">
@@ -42,13 +41,6 @@
         <input type="date" id="tm-fecha" autocomplete="off">
       </div>
       <span class="tm-solo-supervisor">🛡 Solo supervisor</span>
-    </section>
-
-    <!-- CUADRE DEL DÍA -->
-    <section class="tm-cuadre" aria-label="Cuadre del día">
-      <div class="tm-kpi"><span aria-hidden="true">⛽</span><div><small>Cargado al móvil</small><strong id="tm-cargado">0 gal</strong><em id="tm-cargado-nota">desde el tanque principal</em></div></div>
-      <div class="tm-kpi"><span aria-hidden="true">🚜</span><div><small>Repartido a máquinas</small><strong id="tm-repartido">0 gal</strong><em id="tm-repartido-nota">0 entregas</em></div></div>
-      <div class="tm-kpi" id="tm-kpi-saldo"><span aria-hidden="true">🛢️</span><div><small>Saldo en el móvil</small><strong id="tm-saldo">0 gal</strong><em id="tm-saldo-nota">—</em></div></div>
     </section>
 
     <!-- FORMULARIO (también sirve para editar una entrega) -->
@@ -90,7 +82,10 @@
 
     <!-- ENTREGAS DEL DÍA -->
     <section class="panel tm-tabla-panel">
-      <h2 class="tm-titulo">Entregas del día</h2>
+      <div class="tm-encabezado-tabla">
+        <h2 class="tm-titulo">Entregas del día</h2>
+        <span class="tm-total" id="tm-total">0 gal · 0 entregas</span>
+      </div>
       <div class="tm-tabla-scroll">
         <table class="tm-tabla">
           <thead><tr><th>Máquina</th><th>Operario</th><th>Horómetro / Km</th><th>Galones</th><th>N.º salida</th><th>Acciones</th></tr></thead>
@@ -105,6 +100,6 @@
   <script src="../js/auth.js"></script>
   <script src="../js/shell.js"></script>
   <script>if (protegerVista('tanque_movil')) { aplicarPermisosEnlaces(); }</script>
-  <script src="../js/tanque-movil.js?v=20261013-1"></script>
+  <script src="../js/tanque-movil.js?v=20261013-2"></script>
 </body>
 </html>

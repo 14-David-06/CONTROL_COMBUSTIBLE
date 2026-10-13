@@ -18,6 +18,7 @@ const campoDesde = document.getElementById('horometros-desde');
 const campoHasta = document.getElementById('horometros-hasta');
 const campoBuscar = document.getElementById('horometros-buscar');
 const campoEstado = document.getElementById('horometros-estado');
+const campoMedida = document.getElementById('horometros-medida'); // '' | 'horas' | 'km'
 const campoOrden = document.getElementById('horometros-orden');
 const contenedorTarjetas = document.getElementById('horometros-tarjetas');
 const contenedorEstados = document.getElementById('horometros-estados');
@@ -106,12 +107,18 @@ const ORDENES = {
   revision: (a, b) => PRIORIDAD_REVISION[grupoEstado(a)] - PRIORIDAD_REVISION[grupoEstado(b)] || b.galones - a.galones,
   nombre: (a, b) => a.maquina.localeCompare(b.maquina, 'es', { numeric: true })
 };
+// Filtro de medida: horómetro (horas) o kilometraje (km). Las "no aplica" solo salen con "Todas".
+function coincideMedida(m) {
+  if (!campoMedida.value) return true;
+  if (esNoAplica(m)) return false;
+  return (m.unidad === 'km' ? 'km' : 'horas') === campoMedida.value;
+}
 function filtrarYOrdenar() {
   const estado = campoEstado.value;
   const orden = ORDENES[campoOrden.value] || ORDENES.galones;
   const alFinal = campoOrden.value === 'nombre' ? () => 0 : (m) => (esNoAplica(m) ? 1 : 0);
   return maquinasPeriodo
-    .filter((m) => coincideTexto(m) && (!estado || grupoEstado(m) === estado))
+    .filter((m) => coincideTexto(m) && coincideMedida(m) && (!estado || grupoEstado(m) === estado))
     .sort((a, b) => alFinal(a) - alFinal(b) || orden(a, b));
 }
 
@@ -283,6 +290,10 @@ function crearTarjeta(m, galonesTotales, expandida = false) {
 function pintar() {
   maquinasVisibles = filtrarYOrdenar();
   const galonesTotales = pintarTotales(maquinasVisibles);
+  document.querySelectorAll('.kpi-filtro').forEach((b) => {
+    b.classList.toggle('activo', campoMedida.value === b.dataset.medida);
+    b.setAttribute('aria-pressed', String(campoMedida.value === b.dataset.medida));
+  });
   pintarEstados();
   // Si la máquina abierta ya no pasa los filtros, se vuelve a la lista completa.
   const enDetalle = maquinasVisibles.find((m) => m.maquina === maquinaEnDetalle);
@@ -332,6 +343,7 @@ function fechasPorDefecto() {
 function limpiarFiltros() {
   campoBuscar.value = '';
   campoEstado.value = '';
+  campoMedida.value = '';
   campoOrden.value = 'galones';
   fechasPorDefecto();
   cargarHorometros();
@@ -342,6 +354,15 @@ campoDesde.addEventListener('change', cargarHorometros);
 campoHasta.addEventListener('change', cargarHorometros);
 campoBuscar.addEventListener('input', pintar);
 campoEstado.addEventListener('change', pintar);
+campoMedida.addEventListener('change', pintar);
+// Tocar "Horas trabajadas" o "Km recorridos" filtra por esa medida; otra vez lo quita.
+document.querySelectorAll('.kpi-filtro').forEach((boton) =>
+  boton.addEventListener('click', () => {
+    campoMedida.value = campoMedida.value === boton.dataset.medida ? '' : boton.dataset.medida;
+    maquinaEnDetalle = null;
+    pintar();
+  })
+);
 campoOrden.addEventListener('change', pintar);
 // Tocar un estado del cuadro lateral filtra por él; tocarlo otra vez lo quita.
 contenedorEstados.addEventListener('click', (e) => {

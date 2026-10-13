@@ -13,7 +13,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/styles.css?v=20261013-2">
-  <link rel="stylesheet" href="../css/theme.css?v=20261013-4">
+  <link rel="stylesheet" href="../css/theme.css?v=20261013-5">
   <title>Horómetros por máquina</title>
   <!-- App instalable (PWA): manifiesto, color de la barra y íconos -->
   <link rel="manifest" href="/manifest.webmanifest">
@@ -56,6 +56,14 @@
         <div><label for="horometros-hasta">Hasta</label><input type="date" id="horometros-hasta" autocomplete="off"></div>
         <div><label for="horometros-buscar">Máquina</label><input type="search" id="horometros-buscar" placeholder="Código o tipo de máquina" autocomplete="off"></div>
         <div>
+          <label for="horometros-medida">Medida</label>
+          <select id="horometros-medida">
+            <option value="">Todas</option>
+            <option value="horas">Horómetro (horas)</option>
+            <option value="km">Kilometraje (km)</option>
+          </select>
+        </div>
+        <div>
           <label for="horometros-estado">Estado</label>
           <select id="horometros-estado">
             <option value="">Todos los estados</option>
@@ -84,8 +92,8 @@
          filtros; el tanque móvil no suma galones para no contar dos veces). -->
     <section class="kpis-horometros" aria-label="Totales del periodo">
       <div class="kpi-horometro kpi-maquinas"><span aria-hidden="true">🚜</span><div><small>Máquinas</small><strong id="kpi-maquinas">0</strong><em id="kpi-maquinas-nota">en el periodo</em></div></div>
-      <div class="kpi-horometro kpi-horas"><span aria-hidden="true">⏱️</span><div><small>Horas trabajadas</small><strong id="kpi-horas">0 h</strong><em>máquinas por horómetro</em></div></div>
-      <div class="kpi-horometro kpi-km"><span aria-hidden="true">🚚</span><div><small>Km recorridos</small><strong id="kpi-km">0 km</strong><em id="kpi-galkm">vehículos por kilometraje</em></div></div>
+      <button type="button" class="kpi-horometro kpi-horas kpi-filtro" data-medida="horas" title="Ver solo las máquinas por horómetro"><span aria-hidden="true">⏱️</span><div><small>Horas trabajadas</small><strong id="kpi-horas">0 h</strong><em>máquinas por horómetro</em></div></button>
+      <button type="button" class="kpi-horometro kpi-km kpi-filtro" data-medida="km" title="Ver solo los vehículos por kilometraje"><span aria-hidden="true">🚚</span><div><small>Km recorridos</small><strong id="kpi-km">0 km</strong><em id="kpi-galkm">vehículos por kilometraje</em></div></button>
       <div class="kpi-horometro kpi-galones"><span aria-hidden="true">⛽</span><div><small>Galones suministrados</small><strong id="kpi-galones">0 gal</strong><em>sin el tanque móvil</em></div></div>
       <div class="kpi-horometro kpi-galh"><span aria-hidden="true">💧</span><div><small>Consumo promedio</small><strong id="kpi-galh">—</strong><em>gal/hora (máquinas por horómetro)</em></div></div>
     </section>
@@ -112,6 +120,6 @@
   <script src="../js/shell.js"></script>
   <!-- Control de acceso: es parte de Reportes, exige el mismo permiso -->
   <script>if (protegerVista('reportes')) { aplicarPermisosEnlaces(); }</script>
-  <script src="../js/horometros.js?v=20261013-3"></script>
+  <script src="../js/horometros.js?v=20261013-4"></script>
 </body>
 </html>

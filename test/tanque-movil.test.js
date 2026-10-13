@@ -2,7 +2,7 @@
 // tanque-movil.test.js — CUADRE Y REGLAS DEL TANQUE MÓVIL
 // ----------------------------------------------------------------------------
 // src/tanque-movil/application/tanque-movil.service.js con repositorios falsos
-// (sin Airtable): saldo del día, lecturas que no encajan y que las entregas se
+// (sin Airtable): total del día, lecturas que no encajan y que las entregas se
 // sumen al reporte de horómetros de cada máquina.
 // ============================================================================
 
@@ -35,12 +35,11 @@ function repositorioMovil(entregas) {
   return {
     listar: async (inicio, fin, maquina = '') =>
       entregas.filter((e) => e.fecha >= inicio && e.fecha <= fin && (!maquina || e.maquina === maquina)),
-    primeraFecha: async () => (entregas.length ? entregas.map((e) => e.fecha).sort()[0] : null),
     insert: async (datos) => ({ id: 'nuevo', ...datos })
   };
 }
 
-test('cuadre: saldo de ayer + cargado - repartido', async () => {
+test('el día muestra sus entregas y el total, sin depender del tanque principal', async () => {
   const entregas = [
     { id: 'a', fecha: '2026-10-08', maquina: 'MA116', cantidad: 140, horometro: '1520' },
     { id: 'b', fecha: '2026-10-09', maquina: 'LZT936', cantidad: 35, horometro: '99829' },
@@ -48,11 +47,10 @@ test('cuadre: saldo de ayer + cargado - repartido', async () => {
   ];
   const servicio = new TanqueMovilService(repositorioMovil(entregas), recordRepository, tractorRepository);
   const dia = await servicio.resumenDia('2026-10-09');
-  assert.equal(dia.saldoAnterior, 10); // 150 - 140 del 8/10
-  assert.equal(dia.cargado, 100);
   assert.equal(dia.repartido, 105);
-  assert.equal(dia.saldo, 5);
+  assert.equal(dia.entregas.length, 2);
   assert.equal(dia.entregas.find((e) => e.maquina === 'LZT936').unidad, 'km');
+  assert.equal(dia.saldo, undefined); // Ya no hay cuadre contra el tanque principal
 });
 
 test('la lectura debe encajar entre la del día anterior y la del día siguiente', async () => {

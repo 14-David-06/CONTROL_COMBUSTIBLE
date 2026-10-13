@@ -2,9 +2,8 @@
 // tanque-movil.js — VISTA "TANQUE MÓVIL" (public/html/tanque-movil.html)
 // ----------------------------------------------------------------------------
 // El supervisor registra lo que el tanque móvil le echó a cada máquina en el
-// campo. Arriba el cuadre del día (lo calcula el servidor en GET
-// /api/tanque-movil): saldo de ayer + cargado al móvil - repartido = saldo.
-// El mismo formulario sirve para corregir una entrega (botón "Editar").
+// campo, como en el registro del tanque principal pero sin lecturas iniciales
+// ni cierre. El mismo formulario sirve para corregir una entrega ("Editar").
 // La etiqueta de la lectura cambia sola: "Kilometraje (km)" en los vehículos
 // marcados así en Máquinas y "Horómetro (h)" en el resto.
 // ============================================================================
@@ -92,7 +91,7 @@ async function cargarDia() {
     const respuesta = await fetch(`/api/tanque-movil?fecha=${encodeURIComponent(campoFecha.value)}`, { cache: 'no-store' });
     const datos = await respuesta.json().catch(() => ({}));
     if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo cargar el día.');
-    pintarCuadre(datos);
+    pintarTotal(datos);
     entregasDia = datos.entregas || [];
     pintarTabla();
   } catch (error) {
@@ -102,21 +101,10 @@ async function cargarDia() {
   }
 }
 
-function pintarCuadre(d) {
-  document.getElementById('tm-cargado').textContent = galones(d.cargado);
-  document.getElementById('tm-cargado-nota').textContent =
-    d.saldoAnterior > 0 ? `+ ${galones(d.saldoAnterior)} que quedaron de antes` : 'desde el tanque principal';
-  document.getElementById('tm-repartido').textContent = galones(d.repartido);
+// Total del día junto al título de la tabla.
+function pintarTotal(d) {
   const cantidad = (d.entregas || []).length;
-  document.getElementById('tm-repartido-nota').textContent = `${cantidad} entrega${cantidad === 1 ? '' : 's'}`;
-
-  // Verde: cuadra exacto. Amarillo: le queda combustible. Rojo: se repartió más de lo que tenía.
-  const saldo = Number(d.saldo) || 0;
-  const tarjeta = document.getElementById('tm-kpi-saldo');
-  tarjeta.className = `tm-kpi ${saldo < -0.05 ? 'tm-rojo' : saldo > 0.05 ? 'tm-amarillo' : 'tm-verde'}`;
-  document.getElementById('tm-saldo').textContent = galones(saldo);
-  document.getElementById('tm-saldo-nota').textContent =
-    saldo < -0.05 ? '⚠ Se repartió más de lo que tenía' : saldo > 0.05 ? 'Le queda combustible' : '✓ Cuadra';
+  document.getElementById('tm-total').textContent = `${galones(d.repartido)} · ${cantidad} entrega${cantidad === 1 ? '' : 's'}`;
 }
 
 function pintarTabla() {
@@ -219,7 +207,7 @@ async function anularEntrega(e) {
   }
   if (entregaEditando === e.id) limpiarFormulario();
   await cargarDia();
-  mostrarAlertaExito('Entrega anulada', 'El cuadre del día se actualizó.');
+  mostrarAlertaExito('Entrega anulada', 'El total del día se actualizó.');
 }
 
 // --- Inicio ----------------------------------------------------------------------

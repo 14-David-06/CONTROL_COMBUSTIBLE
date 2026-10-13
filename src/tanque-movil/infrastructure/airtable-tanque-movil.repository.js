@@ -49,16 +49,6 @@ class AirtableTanqueMovilRepository {
     return filas.map(aEntrega);
   }
 
-  // Fecha de la primera entrega registrada (desde ahí se cuadra el saldo).
-  async primeraFecha() {
-    const [fila] = await this.cliente.listar(TABLA, {
-      formula: `{estado}!='ANULADO'`,
-      orden: [{ campo: 'fecha', direccion: 'asc' }],
-      maxFilas: 1
-    });
-    return fila ? String(fila.fecha || '').slice(0, 10) : null;
-  }
-
   async findById(id) {
     const fila = await this.cliente.obtener(TABLA, id);
     return fila ? aEntrega(fila) : null;

@@ -4,16 +4,9 @@
 // El supervisor pasa a la app la planilla del tanque móvil: qué máquina recibió
 // cuántos galones en el campo y con qué lectura (horómetro o km).
 //
-// CUADRE DEL DÍA (lo que se ve arriba en la pantalla):
-//   * Cargado al móvil  = galones que el TANQUE PRINCIPAL le echó al tanque
-//     móvil ese día (se lee de registros_combustible; aquí no se registra).
-//   * Saldo anterior    = lo que le quedaba al móvil del día anterior.
-//   * Repartido         = suma de las entregas a máquinas de ese día.
-//   * Saldo             = saldo anterior + cargado - repartido.
-// El saldo se acumula desde la PRIMERA entrega registrada en esta tabla: lo de
-// antes nunca se pasó a la app, así que se toma como cero.
-//
-// Nada de esto toca la jornada, las lecturas M1/M2 ni el cierre del día.
+// Funciona como el registro del tanque principal pero SIN lecturas iniciales
+// ni cierre: no hay cuadre contra el tanque principal (no siempre se registra
+// el llenado del móvil). Nada de esto toca la jornada, M1/M2 ni el cierre.
 // ============================================================================
 
 const { hoyLocal, esFechaValida } = require('../../shared/application/fechas');
@@ -39,54 +32,19 @@ class TanqueMovilService {
       });
   }
 
-  // Cuadre y entregas de un día.
+  // Entregas de un día y su total (lo que registró el supervisor).
   async resumenDia(fecha) {
     this.disponible();
     if (!esFechaValida(fecha)) throw bad('La fecha no es válida.');
-    const desde = (await this.repository.primeraFecha()) || fecha;
-    const inicio = desde < fecha ? desde : fecha;
-
-    const [registros, entregas, tractores] = await Promise.all([
-      this.recordRepository.findByDateRange(inicio, fecha, ''),
-      this.repository.listar(inicio, fecha),
+    const [entregas, tractores] = await Promise.all([
+      this.repository.listar(fecha, fecha),
       this.tractorRepository.list()
     ]);
-    const tractorDe = new Map(tractores.map((t) => [String(t.maquina || '').toUpperCase(), t]));
-
-    // Lo que el tanque principal le cargó al móvil (registros a nombre del tanque móvil).
-    const cargas = registros
-      .filter((r) => {
-        const clave = String(r.maquina || '').trim().toUpperCase();
-        return esTanqueMovil(clave, tractorDe.get(clave));
-      })
-      .map((r) => ({
-        fecha: String(r.fecha || '').slice(0, 10),
-        operario: r.operario || '',
-        cantidad: Number(r.cantidad) || 0
-      }));
-
-    const suma = (lista) => lista.reduce((total, x) => total + x.cantidad, 0);
-    // Antes de la primera entrega registrada no se cuadra: saldo anterior = 0.
-    const cuentaParaSaldo = (x) => x.fecha >= desde && x.fecha < fecha;
-    const saldoAnterior = suma(cargas.filter(cuentaParaSaldo)) - suma(entregas.filter(cuentaParaSaldo));
-    const cargasDelDia = cargas.filter((x) => x.fecha === fecha);
-    const entregasDelDia = entregas.filter((x) => x.fecha === fecha);
-    const cargado = suma(cargasDelDia);
-    const repartido = suma(entregasDelDia);
-
+    const unidadDe = new Map(tractores.map((t) => [String(t.maquina || '').toUpperCase(), t.unidad_medida]));
     return {
       fecha,
-      desde,
-      saldoAnterior: redondear(saldoAnterior),
-      cargado: redondear(cargado),
-      disponible: redondear(saldoAnterior + cargado),
-      repartido: redondear(repartido),
-      saldo: redondear(saldoAnterior + cargado - repartido),
-      cargas: cargasDelDia,
-      entregas: entregasDelDia.map((e) => ({
-        ...e,
-        unidad: tractorDe.get(String(e.maquina).toUpperCase())?.unidad_medida || 'horas'
-      }))
+      repartido: redondear(entregas.reduce((total, e) => total + e.cantidad, 0)),
+      entregas: entregas.map((e) => ({ ...e, unidad: unidadDe.get(String(e.maquina).toUpperCase()) || 'horas' }))
     };
   }
 
