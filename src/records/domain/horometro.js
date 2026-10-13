@@ -92,6 +92,7 @@ function calcularHorometro(tanqueos) {
     horometroInicial: primera ? primera.horas : null,
     horometroFinal: anterior ? anterior.horas : null,
     horasTrabajadas: horas,
+    galonesTramos: cantidadTramos ? redondear(galonesTramos) : null, // Galones que entran al gal/hora
     galonesPorHora: horas > 0 ? redondear(galonesTramos / horas) : null,
     tramosAjustados,
     tramosQueRetroceden

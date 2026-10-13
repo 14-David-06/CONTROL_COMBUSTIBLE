@@ -313,6 +313,7 @@ class RecordService {
           horometroInicial: calculo.horometroInicial,
           horometroFinal: calculo.horometroFinal,
           horasTrabajadas: calculo.horasTrabajadas,
+          galonesTramos: calculo.galonesTramos, // Para el gal/hora promedio de toda la flota
           galonesPorHora: calculo.galonesPorHora,
           tramosAjustados: calculo.tramosAjustados,
           tramosQueRetroceden: calculo.tramosQueRetroceden,

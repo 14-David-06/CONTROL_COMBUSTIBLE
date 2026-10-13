@@ -13,7 +13,7 @@
 // avisa si falta).
 // ============================================================================
 
-const VERSION = 'v6-2026-10-13';
+const VERSION = 'v7-2026-10-13';
 const CACHE = `combustible-${VERSION}`;
 
 const PAGINAS = [

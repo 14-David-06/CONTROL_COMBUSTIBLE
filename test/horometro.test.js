@@ -27,6 +27,7 @@ test('tramos normales: horas = diferencia y gal/hora sin la primera carga', () =
   assert.equal(r.horometroFinal, 1487.9);
   assert.equal(r.horasTrabajadas, 50.1);
   assert.equal(r.galonesPorHora, 0.89); // (15.4 + 11.5 + 17.8) / 50.1
+  assert.equal(r.galonesTramos, 44.7); // Sin la primera carga (19.3)
   assert.equal(r.tramosAjustados, 0);
 });
 

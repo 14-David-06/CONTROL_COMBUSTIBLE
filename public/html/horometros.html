@@ -1,17 +1,19 @@
 <!DOCTYPE html>
 <!-- ==========================================================================
      horometros.html — HORÓMETROS POR MÁQUINA (se entra desde Reportes)
-     Una carta por máquina con sus tanqueos, horas trabajadas y galones por
-     hora (máximo 24 h por día en cada tramo). Los datos ya vienen calculados
-     del servidor (GET /api/horometros). Lógica en ../js/horometros.js.
+     Cuatro bloques: filtros, totales del periodo, cartas por máquina (horas
+     trabajadas, gal/hora y galones, con "Ver detalles") y a la derecha el
+     cuadro de estados, que también sirve de filtro.
+     Los datos ya vienen calculados del servidor (GET /api/horometros, máximo
+     24 h por día en cada tramo). Lógica en ../js/horometros.js.
      Requiere el permiso 'reportes'.
      ========================================================================== -->
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="../css/styles.css">
-  <link rel="stylesheet" href="../css/theme.css?v=20261003-4">
+  <link rel="stylesheet" href="../css/styles.css?v=20261013-2">
+  <link rel="stylesheet" href="../css/theme.css?v=20261013-2">
   <title>Horómetros por máquina</title>
   <!-- App instalable (PWA): manifiesto, color de la barra y íconos -->
   <link rel="manifest" href="/manifest.webmanifest">
@@ -24,7 +26,7 @@
   <script src="/js/pwa.js" defer></script>
 </head>
 <body>
-  <main class="pantalla">
+  <main class="pantalla vista-horometros">
     <!-- Encabezado estándar de las pantallas internas -->
     <header class="encabezado encabezado-compacto">
       <div class="encabezado-control">
@@ -35,41 +37,81 @@
       <button class="boton-tres-puntos" type="button" aria-label="Abrir menú" aria-expanded="false"><span></span><span></span><span></span></button>
     </header>
 
-    <!-- FILTROS: rango de fechas, máquina y estado. Las fechas consultan al
-         servidor; la máquina y el estado filtran en el navegador. -->
+    <!-- BLOQUE 1: FILTROS. Las fechas consultan al servidor; máquina, estado y
+         orden solo reorganizan lo que ya se descargó. -->
     <section class="panel controles-horometros">
-      <div><label for="horometros-desde">Desde</label><input type="date" id="horometros-desde" autocomplete="off"></div>
-      <div><label for="horometros-hasta">Hasta</label><input type="date" id="horometros-hasta" autocomplete="off"></div>
-      <div><label for="horometros-buscar">Máquina</label><input type="search" id="horometros-buscar" placeholder="Código o tipo de máquina" autocomplete="off"></div>
-      <div>
-        <label for="horometros-estado">Estado</label>
-        <select id="horometros-estado">
-          <option value="">Todas</option>
-          <option value="ok">✓ OK</option>
-          <option value="ajustado">⚠ Con tramos ajustados</option>
-          <option value="sin-datos">Sin horas (sin lecturas o una sola)</option>
-          <option value="na">Sin horómetro / tanque móvil</option>
-        </select>
+      <div class="controles-horometros-titulo">
+        <div>
+          <h2>Consulta y analiza las horas de trabajo de cada máquina</h2>
+          <p class="texto-secundario" id="horometros-periodo">—</p>
+        </div>
+        <div class="botones-tabla">
+          <a class="boton-secundario boton-enlace" href="reportes">← Reportes</a>
+          <button type="button" class="boton-secundario" id="horometros-imprimir">🖨 Imprimir</button>
+          <button type="button" class="boton-principal" id="horometros-exportar">⬇ Exportar Excel</button>
+        </div>
       </div>
-      <div class="botones-tabla">
-        <a class="boton-secundario boton-enlace" href="reportes">← Reportes</a>
-        <button type="button" id="horometros-exportar">Exportar Excel</button>
+      <div class="controles-horometros-filtros">
+        <div><label for="horometros-desde">Desde</label><input type="date" id="horometros-desde" autocomplete="off"></div>
+        <div><label for="horometros-hasta">Hasta</label><input type="date" id="horometros-hasta" autocomplete="off"></div>
+        <div><label for="horometros-buscar">Máquina</label><input type="search" id="horometros-buscar" placeholder="Código o tipo de máquina" autocomplete="off"></div>
+        <div>
+          <label for="horometros-estado">Estado</label>
+          <select id="horometros-estado">
+            <option value="">Todos los estados</option>
+            <option value="ok">Correctas</option>
+            <option value="ajustado">Con tramos ajustados</option>
+            <option value="una-lectura">Una sola lectura</option>
+            <option value="sin-lecturas">Sin lecturas numéricas</option>
+            <option value="na">Sin horómetro / tanque móvil</option>
+          </select>
+        </div>
+        <div>
+          <label for="horometros-orden">Ordenar por</label>
+          <select id="horometros-orden">
+            <option value="galones">Mayor consumo</option>
+            <option value="horas">Más horas trabajadas</option>
+            <option value="galh">Mayor gal/hora</option>
+            <option value="revision">Primero las que hay que revisar</option>
+            <option value="nombre">Nombre (A–Z)</option>
+          </select>
+        </div>
+        <button type="button" class="boton-secundario" id="horometros-limpiar">↻ Limpiar filtros</button>
       </div>
     </section>
 
-    <!-- LISTADO: totales arriba y una carta por máquina (horometros.js) -->
-    <section class="panel registros tarjetas-registros-panel">
-      <div class="titulo-tabla titulo-tarjetas-registros">
-        <div>
-          <span class="eyebrow-dashboard">HORAS TRABAJADAS Y CONSUMO</span>
-          <h2>Máquinas del periodo</h2>
-          <p class="texto-secundario">Horas = diferencia del horómetro, con máximo 24 h por día. Gal/hora = galones cargados después de la primera lectura ÷ horas trabajadas.</p>
-        </div>
-        <div class="resumen-tarjetas"><strong id="horometros-total-maquinas">0</strong><small>máquinas</small><strong id="horometros-total-tanqueos">0</strong><small>tanqueos</small></div>
-      </div>
-      <div id="horometros-tarjetas" class="grid-registros-tarjetas"></div>
-      <p class="tabla-vacia" id="horometros-vacio" hidden>No hay tanqueos que coincidan con los filtros.</p>
+    <!-- BLOQUE 2: TOTALES DEL PERIODO (de las máquinas que se ven con los
+         filtros; el tanque móvil no suma galones para no contar dos veces). -->
+    <section class="kpis-horometros" aria-label="Totales del periodo">
+      <div class="kpi-horometro kpi-maquinas"><span aria-hidden="true">🚜</span><div><small>Máquinas</small><strong id="kpi-maquinas">0</strong><em id="kpi-maquinas-nota">en el periodo</em></div></div>
+      <div class="kpi-horometro kpi-horas"><span aria-hidden="true">⏱️</span><div><small>Horas trabajadas</small><strong id="kpi-horas">0 h</strong><em>máx. 24 h por día</em></div></div>
+      <div class="kpi-horometro kpi-galones"><span aria-hidden="true">⛽</span><div><small>Galones suministrados</small><strong id="kpi-galones">0 gal</strong><em>sin el tanque móvil</em></div></div>
+      <div class="kpi-horometro kpi-galh"><span aria-hidden="true">💧</span><div><small>Consumo promedio</small><strong id="kpi-galh">—</strong><em>gal/hora de la flota</em></div></div>
     </section>
+
+    <div class="horometros-layout">
+      <!-- BLOQUE 3: UNA CARTA POR MÁQUINA (horometros.js) -->
+      <section class="horometros-cartas-zona" aria-label="Máquinas">
+        <div id="horometros-tarjetas" class="grid-horometros"></div>
+        <p class="panel tabla-vacia" id="horometros-vacio" hidden>No hay tanqueos que coincidan con los filtros.</p>
+      </section>
+
+      <!-- BLOQUE 4: ESTADOS (cada fila filtra al tocarla) y nota explicativa -->
+      <aside class="horometros-lateral">
+        <section class="panel">
+          <h2 class="horometros-lateral-titulo">Estados de los registros</h2>
+          <div id="horometros-estados" class="lista-estados-horometro"></div>
+        </section>
+        <section class="panel nota-horometros">
+          <h2 class="horometros-lateral-titulo">💡 Ten en cuenta</h2>
+          <ul>
+            <li><strong>Horas</strong> = diferencia del horómetro entre tanqueos, con máximo 24 h por cada día.</li>
+            <li><strong>Gal/hora</strong> = galones cargados después de la primera lectura ÷ horas trabajadas. Por eso no sale de dividir los galones totales entre las horas: la primera carga se gastó antes de la primera lectura.</li>
+            <li>El <strong>tanque móvil</strong> y las máquinas <strong>sin horómetro</strong> no entran en las horas ni en el promedio.</li>
+          </ul>
+        </section>
+      </aside>
+    </div>
   </main>
 
   <script src="/vendor/sweetalert2.all.min.js"></script>
@@ -77,6 +119,6 @@
   <script src="../js/shell.js"></script>
   <!-- Control de acceso: es parte de Reportes, exige el mismo permiso -->
   <script>if (protegerVista('reportes')) { aplicarPermisosEnlaces(); }</script>
-  <script src="../js/horometros.js?v=20261003-2"></script>
+  <script src="../js/horometros.js?v=20261013-1"></script>
 </body>
 </html>

@@ -300,31 +300,130 @@ label { color:var(--cc-texto);font-weight:700 }
 .metrica-revisar { color:#9d3027 }
 .nota-grafica { margin:-4px 0 8px;color:var(--cc-muted);font-size:.78rem }
 .nota-grafica strong { color:var(--cc-texto) }
-/* Vista "Horómetros por máquina" (horometros.html / horometros.js).
-   Reutiliza las cartas de Historial (.registro-tarjeta, .campo-registro-tarjeta). */
-.controles-horometros { display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:12px;align-items:end }
-.controles-horometros .botones-tabla { display:flex;gap:8px;flex-wrap:wrap }
+/* ---------------------------------------------------------------------------
+   Vista "Horómetros por máquina" (horometros.html / horometros.js): filtros,
+   4 totales, cartas por máquina y a la derecha el cuadro de estados.
+   Colores de estado: correcta verde, ajustada amarillo, una lectura azul,
+   sin lecturas rojo, sin horómetro / tanque morado.
+   --------------------------------------------------------------------------- */
 .acceso-horometros { display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap }
 .acceso-horometros h2 { margin:4px 0 }
 .boton-enlace { display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 14px;border-radius:11px;font-weight:700;text-decoration:none }
-.tarjeta-horometro .campo-registro-tarjeta strong { padding:8px 10px;border-radius:10px;background:#f2f7f3;border:1px solid var(--cc-borde);color:var(--cc-texto);font-size:.95rem }
-.tarjeta-horometro .dato-destacado strong { background:var(--cc-verde-suave);color:var(--cc-verde-oscuro) }
-.tarjeta-horometro.estado-ajustado { border-color:#e8b4ae }
-.estado-horometro-ok strong { color:var(--cc-verde-oscuro) }
-.estado-horometro-ajustado { background:var(--cc-rojo-suave)!important;border-color:#f0c5c1!important }
-.estado-horometro-ajustado strong { color:#9d3027 }
+
+/* Filtros */
+.controles-horometros-titulo { display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:14px }
+.controles-horometros-titulo h2 { margin:0;font-size:1.05rem }
+.controles-horometros-titulo .botones-tabla { display:flex;gap:8px;flex-wrap:wrap }
+.controles-horometros-filtros { display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) auto;gap:12px;align-items:end }
+.controles-horometros-filtros label { display:block;margin-bottom:5px;font-size:.82rem }
+.controles-horometros-filtros button { white-space:nowrap }
+
+/* Totales del periodo */
+.kpis-horometros { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:14px }
+.kpi-horometro { display:flex;align-items:center;gap:12px;padding:16px;border:1px solid var(--cc-borde);border-radius:var(--cc-radio);background:var(--cc-superficie);box-shadow:var(--cc-sombra) }
+.kpi-horometro > span { width:46px;height:46px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;font-size:1.35rem }
+.kpi-horometro small { display:block;color:var(--cc-muted);font-size:.78rem;font-weight:700 }
+.kpi-horometro strong { display:block;margin:2px 0;font-size:1.5rem;line-height:1.1;color:var(--cc-texto) }
+.kpi-horometro em { display:block;color:var(--cc-muted);font-size:.75rem;font-style:normal }
+.kpi-maquinas > span { background:var(--cc-azul-suave) }
+.kpi-horas > span { background:var(--cc-verde-suave) }
+.kpi-galones > span { background:var(--cc-morado-suave) }
+.kpi-galh > span { background:var(--cc-naranja-suave) }
+.kpi-galh { border-color:#efc9b6;background:linear-gradient(180deg,#fff,var(--cc-naranja-suave)) }
+.kpi-galh strong { color:var(--cc-naranja) }
+
+/* Cartas + lateral */
+.horometros-layout { display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;margin-top:14px;align-items:start }
+.grid-horometros { display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;align-items:start } /* start: abrir una carta no estira las vecinas */
+.carta-horometro { display:flex;flex-direction:column;gap:12px;padding:16px!important;border-top:4px solid var(--cc-verde)!important }
+.carta-horometro.estado-ajustado { border-top-color:var(--cc-amarillo)!important }
+.carta-horometro.estado-una-lectura { border-top-color:var(--cc-azul)!important }
+.carta-horometro.estado-sin-lecturas { border-top-color:var(--cc-rojo)!important }
+.carta-horometro.estado-na { border-top-color:var(--cc-morado)!important }
+.carta-horometro-cabecera { display:flex;align-items:flex-start;gap:10px }
+.carta-horometro-icono { width:42px;height:42px;flex-shrink:0;display:grid;place-items:center;border-radius:12px;background:var(--cc-verde-suave);font-size:1.4rem }
+.carta-horometro-nombre { flex:1;min-width:0 }
+.carta-horometro-nombre h3 { margin:0;font-size:1.05rem }
+.carta-horometro-nombre p { margin:2px 0 0;color:var(--cc-muted);font-size:.8rem;word-break:normal;overflow-wrap:normal }
+.etiqueta-estado { flex-shrink:0;padding:4px 9px;border-radius:999px;border:1px solid #cfe1d1;background:var(--cc-verde-suave);color:var(--cc-verde-oscuro);font-size:.7rem;font-weight:800;white-space:nowrap }
+.etiqueta-estado.estado-ajustado { background:var(--cc-amarillo-suave);border-color:#e8d8a8;color:#7f6121 }
+.etiqueta-estado.estado-una-lectura { background:var(--cc-azul-suave);border-color:#c9daec;color:var(--cc-azul) }
+.etiqueta-estado.estado-sin-lecturas { background:var(--cc-rojo-suave);border-color:#f0c5c1;color:#9d3027 }
+.etiqueta-estado.estado-na { background:var(--cc-morado-suave);border-color:#dcd5f2;color:var(--cc-morado) }
+.carta-horometro-metricas { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px }
+.carta-horometro-metricas > div { padding:8px 10px;border-radius:10px;background:#f7faf7;border:1px solid var(--cc-borde) }
+.carta-horometro-metricas small { display:block;color:var(--cc-muted);font-size:.7rem;font-weight:700 }
+.carta-horometro-metricas strong { display:block;margin-top:2px;font-size:1.05rem;color:var(--cc-texto);white-space:nowrap }
+.carta-horometro-metricas .metrica-galh { background:var(--cc-naranja-suave);border-color:#efc9b6 }
+.carta-horometro-metricas .metrica-galh strong { color:var(--cc-naranja) }
+.carta-horometro-barra { display:flex;align-items:center;gap:10px }
+.carta-horometro-barra small { flex-shrink:0;color:var(--cc-muted);font-size:.75rem;font-weight:700 }
+.barra-consumo { flex:1;height:8px;border-radius:999px;background:#e7ede8;overflow:hidden }
+.barra-consumo span { display:block;height:100%;border-radius:999px;background:var(--cc-verde) }
+.estado-ajustado .barra-consumo span { background:var(--cc-amarillo) }
+.carta-horometro-ver { display:flex;justify-content:space-between;align-items:center;width:100%;min-height:40px!important;margin-top:auto;padding:0 12px!important;border:1px solid var(--cc-borde);background:var(--cc-superficie);color:var(--cc-verde-oscuro);box-shadow:none;font-size:.85rem;font-weight:800;white-space:nowrap }
+.carta-horometro-ver:hover:not(:disabled) { background:var(--cc-verde-suave);box-shadow:none }
+.carta-horometro-detalle { display:grid;gap:10px }
+.carta-horometro-detalle[hidden] { display:none } /* display:grid anularía el atributo hidden */
+.carta-horometro-detalle .grid-campos-registro { grid-template-columns:1fr 1fr }
+.carta-horometro-aviso { margin:0;padding:8px 10px;border-radius:10px;background:var(--cc-azul-suave);color:var(--cc-azul);font-size:.8rem;font-weight:700 }
+.carta-horometro-aviso.estado-ajustado { background:var(--cc-rojo-suave);color:#9d3027 }
+.carta-horometro-aviso.estado-na { background:var(--cc-morado-suave);color:var(--cc-morado) }
+
+/* Lateral: estados (cada fila filtra) y nota */
+.horometros-lateral { position:sticky;top:14px;display:grid;gap:14px }
+.horometros-lateral-titulo { margin:0 0 10px;font-size:1rem }
+.lista-estados-horometro { display:grid;gap:6px }
+.estado-fila { display:grid;grid-template-columns:14px minmax(0,1fr) auto;align-items:start;gap:10px;width:100%;min-height:0!important;padding:9px 10px!important;border:1px solid transparent;border-radius:12px!important;background:transparent;color:var(--cc-texto);box-shadow:none;text-align:left;font-weight:400 }
+.estado-fila:hover:not(:disabled) { background:#f7faf7;box-shadow:none }
+.estado-fila.activo { border-color:var(--cc-verde);background:var(--cc-verde-suave) }
+.estado-fila i { width:12px;height:12px;margin-top:4px;border-radius:50%;background:var(--cc-verde) }
+.estado-fila.estado-ajustado i { background:var(--cc-amarillo) }
+.estado-fila.estado-una-lectura i { background:var(--cc-azul) }
+.estado-fila.estado-sin-lecturas i { background:var(--cc-rojo) }
+.estado-fila.estado-na i { background:var(--cc-morado) }
+.estado-fila strong { display:block;font-size:.88rem }
+.estado-fila small { display:block;margin-top:2px;color:var(--cc-muted);font-size:.75rem;line-height:1.35 }
+.estado-fila b { font-size:1.05rem }
+.nota-horometros ul { margin:0;padding-left:18px;display:grid;gap:6px;color:var(--cc-muted);font-size:.8rem;line-height:1.4 }
+.nota-horometros strong { color:var(--cc-texto) }
+
+/* Detalle de cada tanqueo (dentro de "Ver detalles") */
 .lista-tanqueos { list-style:none;margin:0;padding:0;display:grid;gap:10px }
-.lista-tanqueos[hidden] { display:none } /* Sin esto, display:grid anula el atributo hidden y la lista nunca se oculta */
 .tanqueo-item { border:1px solid var(--cc-borde);border-radius:12px;padding:10px 12px;background:#f7faf7 }
 .tanqueo-item.tanqueo-ajustado { background:var(--cc-rojo-suave);border-color:#f0c5c1 }
 .tanqueo-cabecera { display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:.85rem;color:var(--cc-muted) }
 .tanqueo-cabecera strong { color:var(--cc-texto) }
-.tanqueo-datos { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px }
+.tanqueo-datos { display:grid;grid-template-columns:1fr 1fr;gap:8px }
 .tanqueo-datos .campo-registro-tarjeta strong { padding:6px 8px;font-size:.85rem;background:#ffffff }
 .tanqueo-motivo { margin:8px 0 0;color:#9d3027;font-size:.8rem;font-weight:700 }
 .tanqueo-observacion { margin:6px 0 0;color:var(--cc-muted);font-size:.8rem }
-@media(max-width:900px) { .controles-horometros { grid-template-columns:1fr 1fr } .controles-horometros .botones-tabla { grid-column:1/-1 } }
-@media(max-width:650px) { .tanqueo-datos { grid-template-columns:1fr 1fr } }
+
+@media(max-width:1200px) { .controles-horometros-filtros { grid-template-columns:repeat(3,minmax(0,1fr)) } }
+@media(max-width:1100px) {
+  .horometros-layout { grid-template-columns:minmax(0,1fr) }
+  .horometros-lateral { position:static;order:-1 } /* En tablet y celular los estados van arriba de las cartas */
+  .nota-horometros { display:none }
+  .kpis-horometros { grid-template-columns:repeat(2,minmax(0,1fr)) }
+}
+@media(max-width:700px) {
+  .controles-horometros-filtros { grid-template-columns:1fr 1fr }
+  .controles-horometros-filtros > div:nth-child(3),.controles-horometros-filtros button { grid-column:1 / -1 }
+  .kpi-horometro { padding:12px;gap:8px }
+  .kpi-horometro > span { width:36px;height:36px;font-size:1.05rem }
+  .kpi-horometro strong { font-size:1.15rem }
+  .estado-fila small { display:none } /* En celular la lista de estados va compacta */
+  .controles-horometros-titulo .botones-tabla > * { flex:1;white-space:nowrap;font-size:.85rem;padding:0 8px }
+}
+/* Impresión: solo totales y cartas, sin menú ni filtros */
+@media print {
+  .vista-horometros .controles-horometros,.vista-horometros .horometros-lateral,.vista-horometros .carta-horometro-ver,
+  .rail,.bottom-nav,.menu-lateral,.boton-tres-puntos { display:none!important }
+  .horometros-layout { display:block }
+  .grid-horometros { display:grid!important;grid-template-columns:repeat(3,1fr) }
+  .carta-horometro { break-inside:avoid }
+  .kpi-horometro,.carta-horometro { box-shadow:none }
+}
 .metrica-revisar strong { color:#9d3027 }
 @media(max-width:700px) {
   .grid-analitica-maquinas { grid-template-columns:1fr }
