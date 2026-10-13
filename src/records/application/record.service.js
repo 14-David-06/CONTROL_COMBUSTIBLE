@@ -43,11 +43,12 @@ function esTanqueMovil(maquina, tractor) {
 
 class RecordService {
   // jornadaService guarda el borrador de la jornada del día junto con el suministro.
-  constructor(repository, tractorRepository, alertService, jornadaService) {
+  constructor(repository, tractorRepository, alertService, jornadaService, tanqueMovilRepository = null) {
     this.repository = repository;
     this.tractorRepository = tractorRepository;
     this.alertService = alertService;
     this.jornadaService = jornadaService;
+    this.tanqueMovilRepository = tanqueMovilRepository; // Entregas del móvil (solo Airtable)
   }
 
   // Todos los suministros vigentes, ya en el formato que espera el frontend.
@@ -244,11 +245,14 @@ class RecordService {
       const tractor = tractorDe.get(clave);
       const sinHorometro = Boolean(tractor?.sin_horometro);
       const tanqueMovil = esTanqueMovil(clave, tractor);
-      const horometro = calcularHorometro(sinHorometro || tanqueMovil ? [] : tanqueosDe.get(clave) || []);
+      const horometro = calcularHorometro(sinHorometro || tanqueMovil ? [] : tanqueosDe.get(clave) || [], {
+        unidad: tractor?.unidad_medida
+      });
       return {
         ...fila,
         sinHorometro,
         esTanqueMovil: tanqueMovil,
+        unidad: tractor?.unidad_medida === 'km' ? 'km' : 'horas',
         horometroInicial: horometro.horometroInicial,
         horometroFinal: horometro.horometroFinal,
         horasTrabajadas: horometro.horasTrabajadas,
@@ -263,10 +267,16 @@ class RecordService {
   // en el rango, sin excepción, con cada tanqueo y la regla de 24 h por día
   // (src/records/domain/horometro.js). El tanque móvil y las máquinas marcadas
   // sin horómetro aparecen, pero sin horas ni gal/hora.
+  // Las ENTREGAS DEL TANQUE MÓVIL (tabla tanque_movil) se suman como tanqueos
+  // más de cada máquina (origen 'movil'): así el consumo sale completo aunque
+  // ese día la máquina no haya pasado por el tanque principal.
+  // Los vehículos por kilometraje (unidad 'km') dan km recorridos y gal/km en
+  // los mismos campos (horasTrabajadas, galonesPorHora).
   async horometrosPorMaquina(inicio, fin) {
-    const [registros, tractores] = await Promise.all([
+    const [registros, tractores, entregasMovil] = await Promise.all([
       this.repository.findByDateRange(inicio, fin, ''),
-      this.tractorRepository.list()
+      this.tractorRepository.list(),
+      this.tanqueMovilRepository ? this.tanqueMovilRepository.listar(inicio, fin) : []
     ]);
     const tractorDe = new Map(tractores.map((t) => [String(t.maquina || '').toUpperCase(), t]));
 
@@ -281,7 +291,22 @@ class RecordService {
         operario: r.operario || '',
         horometro: r.horometro ?? '',
         cantidad: Number(r.cantidad) || 0,
-        observaciones: r.observaciones || ''
+        observaciones: r.observaciones || '',
+        origen: 'principal'
+      });
+    }
+    for (const e of entregasMovil) {
+      const clave = String(e.maquina || '').trim().toUpperCase();
+      if (!clave) continue;
+      if (!porMaquina.has(clave)) porMaquina.set(clave, []);
+      porMaquina.get(clave).push({
+        fecha: e.fecha,
+        registradoEn: e.registradoEn ? new Date(e.registradoEn).toISOString() : '',
+        operario: e.operario,
+        horometro: e.horometro,
+        cantidad: e.cantidad,
+        observaciones: e.observaciones,
+        origen: 'movil'
       });
     }
 
@@ -292,9 +317,14 @@ class RecordService {
         const tanqueMovil = esTanqueMovil(maquina, tractor);
         const sinHorometro = tanqueMovil || Boolean(tractor?.sin_horometro);
         // Sin horómetro: se calcula igual (orden, galones) pero sin lecturas.
+        const unidad = tractor?.unidad_medida === 'km' ? 'km' : 'horas';
         const calculo = calcularHorometro(
-          sinHorometro ? tanqueos.map((t) => ({ ...t, horometro: '' })) : tanqueos
+          sinHorometro ? tanqueos.map((t) => ({ ...t, horometro: '' })) : tanqueos,
+          { unidad }
         );
+        const galonesMovil = tanqueos
+          .filter((t) => t.origen === 'movil')
+          .reduce((total, t) => total + t.cantidad, 0);
         const galones = tanqueos.reduce((total, t) => total + t.cantidad, 0);
         let estado = 'ok';
         if (tanqueMovil) estado = 'tanque';
@@ -306,9 +336,11 @@ class RecordService {
           maquina,
           descripcion: tractor?.descripcion || '',
           tipo: String(tractor?.descripcion || '').trim().split(/\s+/)[0] || '',
+          unidad, // 'horas' o 'km'
           estado,
           cantidadTanqueos: tanqueos.length,
           galones: redondear(galones),
+          galonesMovil: redondear(galonesMovil), // Parte de "galones" que vino del tanque móvil
           promedio: tanqueos.length ? redondear(galones / tanqueos.length) : 0,
           horometroInicial: calculo.horometroInicial,
           horometroFinal: calculo.horometroFinal,
@@ -323,10 +355,14 @@ class RecordService {
             horometro: sinHorometro ? 'N/A' : t.horometro,
             cantidad: t.cantidad,
             observaciones: t.observaciones,
+            origen: t.origen,
             horasHorometro: t.horasHorometro,
             topeHoras: t.topeHoras,
             horasTramo: t.horasTramo,
-            galonesPorHoraTramo: t.horasTramo > 0 ? redondear(t.cantidad / t.horasTramo) : null,
+            galonesPorHoraTramo:
+              t.horasTramo > 0
+                ? Math.round((t.cantidad / t.horasTramo) * (unidad === 'km' ? 1000 : 100)) / (unidad === 'km' ? 1000 : 100)
+                : null,
             ajustado: t.ajustado,
             retrocede: t.retrocede
           }))
@@ -376,4 +412,4 @@ class RecordService {
   }
 }
 
-module.exports = { RecordService };
+module.exports = { RecordService, esTanqueMovil };

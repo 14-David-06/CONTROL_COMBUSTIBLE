@@ -61,6 +61,7 @@ const TABLAS = {
     texto('centro_costo'),
     numero('capacidad_galones'),
     marca('sin_horometro'), // Sin horómetro: el suministro se guarda como N/A y no genera alerta
+    texto('unidad_medida'), // 'km' = la lectura es kilometraje; vacío = horómetro (horas)
     ...anulacion()
   ],
 
@@ -99,6 +100,24 @@ const TABLAS = {
     numero('cantidad'),
     texto('numero_sai'),
     textoLargo('firma'),
+    textoLargo('observaciones'),
+    texto('registrado_por'),
+    fechaHora('registrado_en'),
+    ...anulacion()
+  ],
+
+  // Entregas del tanque móvil a cada máquina en el campo (vista "Tanque móvil",
+  // la llena el supervisor con la planilla del móvil). Va APARTE de
+  // registros_combustible a propósito: no toca jornadas, lecturas M1/M2 ni el
+  // cierre del tanque principal. "horometro" guarda horas o km según la
+  // unidad_medida de la máquina.
+  tanque_movil: [
+    fecha('fecha'),
+    texto('maquina'),
+    texto('operario'),
+    texto('horometro'),
+    numero('cantidad'),
+    texto('numero_salida'),
     textoLargo('observaciones'),
     texto('registrado_por'),
     fechaHora('registrado_en'),

@@ -46,6 +46,10 @@ const { crearRutasJornadas } = require('./src/jornadas/infrastructure/jornada.ro
 const { RecordService } = require('./src/records/application/record.service');
 const { crearRutasRegistros } = require('./src/records/infrastructure/record.routes');
 
+// --- Módulo TANQUE MÓVIL (entregas del móvil a cada máquina en el campo) ---
+const { TanqueMovilService } = require('./src/tanque-movil/application/tanque-movil.service');
+const { crearRutasTanqueMovil } = require('./src/tanque-movil/infrastructure/tanque-movil.routes');
+
 // --- Módulo REPORTES (se calculan al momento, no hay tabla) ---
 const { ReportService } = require('./src/reports/application/report.service');
 const { crearRutasReportes } = require('./src/reports/infrastructure/report.routes');
@@ -77,7 +81,8 @@ let userRepository,
   operatorRepository,
   jornadaRepository,
   recordRepository,
-  alertRepository;
+  alertRepository,
+  tanqueMovilRepository = null; // Solo existe con Airtable (no hay tabla en Postgres)
 let almacenamientoExtra = {}; // Datos extra que necesita storage.js (el cliente de Airtable, si aplica)
 
 if (PROVIDER === 'airtable') {
@@ -122,6 +127,10 @@ if (PROVIDER === 'airtable') {
     );
   alertRepository =
     new (require('./src/alerts/infrastructure/airtable-alert.repository').AirtableAlertRepository)(
+      cliente
+    );
+  tanqueMovilRepository =
+    new (require('./src/tanque-movil/infrastructure/airtable-tanque-movil.repository').AirtableTanqueMovilRepository)(
       cliente
     );
 } else {
@@ -186,6 +195,7 @@ const paginas = [
   'reportes', // Listado de cierres mensuales
   'reporte-detalle', // Detalle/exportación de un reporte mensual
   'horometros', // Horómetros por máquina: horas trabajadas y gal/hora (se entra desde Reportes)
+  'tanque-movil', // Entregas del tanque móvil a cada máquina (supervisor)
   'alertas', // Bandeja de alertas de consumo
   'auditoria', // Bitácora de acciones
   'cambiar-contrasena' // Cambio obligatorio/voluntario de contraseña
@@ -257,12 +267,19 @@ const tractorService = new TractorService(tractorRepository);
 const operatorService = new OperatorService(operatorRepository);
 const alertService = new AlertService(alertRepository, storage, pushService);
 const jornadaService = new JornadaService(jornadaRepository, alertService, pushService);
-// RecordService necesita tractores (capacidad), alertas (para generarlas) y la jornada del día.
+// RecordService necesita tractores (capacidad), alertas (para generarlas), la jornada
+// del día y las entregas del tanque móvil (para el reporte de horómetros).
 const recordService = new RecordService(
   recordRepository,
   tractorRepository,
   alertService,
-  jornadaService
+  jornadaService,
+  tanqueMovilRepository
+);
+const tanqueMovilService = new TanqueMovilService(
+  tanqueMovilRepository,
+  recordRepository,
+  tractorRepository
 );
 const reportService = new ReportService(recordRepository, jornadaRepository);
 
@@ -283,6 +300,7 @@ app.use('/api', crearRutasOperarios(operatorService, auditRepository)); // /api/
 app.use('/api', crearRutasJornadas(jornadaService, auditRepository)); // /api/cierre-dia, /api/jornadas
 app.use('/api', crearRutasReportes(reportService)); // /api/reportes
 app.use('/api', crearRutasRegistros(recordService, auditRepository)); // /api/registros
+app.use('/api', crearRutasTanqueMovil(tanqueMovilService, auditRepository)); // /api/tanque-movil
 app.use('/api', crearRutasAlertas(alertService, auditRepository, storage)); // /api/alertas y notificaciones
 app.use('/api', crearRutasAuditoria(auditRepository)); // /api/auditoria
 app.use('/api', crearRutasPush(pushService)); // /api/push/...

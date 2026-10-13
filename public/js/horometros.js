@@ -9,6 +9,9 @@
 // las máquinas de cada estado y, al tocar uno, filtra por él.
 // Los cálculos los hace el SERVIDOR (GET /api/horometros, regla de 24 h por
 // día en src/records/domain/horometro.js): aquí solo se suman, filtran y ordenan.
+// VEHÍCULOS POR KILOMETRAJE (unidad 'km'): los mismos campos traen km recorridos
+// y gal/km; aquí solo cambian los rótulos (ver UNIDADES) y se suman aparte.
+// Las entregas del TANQUE MÓVIL a cada máquina ya vienen incluidas (origen 'movil').
 // ============================================================================
 
 const campoDesde = document.getElementById('horometros-desde');
@@ -32,15 +35,22 @@ const ESTADOS = {
   ajustado: {
     etiqueta: 'Tramos ajustados',
     titulo: 'Con tramos ajustados',
-    descripcion: 'El horómetro marcó más de 24 h por día (o bajó) y se usó el tope. Conviene revisar esas lecturas.'
+    descripcion: 'La lectura marcó más de lo posible (24 h o 1.000 km por día) o bajó, y se usó el tope. Conviene revisar esas lecturas.'
   },
-  'una-lectura': { etiqueta: 'Una sola lectura', titulo: 'Una sola lectura', descripcion: 'Solo un tanqueo trae horómetro: todavía no se pueden calcular horas.' },
-  'sin-lecturas': { etiqueta: 'Sin lecturas', titulo: 'Sin lecturas numéricas', descripcion: 'Ningún tanqueo trae un número de horómetro (dañado, vacío...).' },
+  'una-lectura': { etiqueta: 'Una sola lectura', titulo: 'Una sola lectura', descripcion: 'Solo un tanqueo trae horómetro o kilometraje: todavía no se puede calcular el consumo.' },
+  'sin-lecturas': { etiqueta: 'Sin lecturas', titulo: 'Sin lecturas numéricas', descripcion: 'Ningún tanqueo trae un número de horómetro o kilometraje (dañado, vacío...).' },
   na: { etiqueta: 'Sin horómetro', titulo: 'Sin horómetro o tanque móvil', descripcion: 'Marcadas "No aplica" en Máquinas, o el tanque móvil. No entran en horas ni promedio.' }
 };
 const grupoEstado = (m) => (['tanque', 'sin-horometro'].includes(m.estado) ? 'na' : m.estado);
 const etiquetaEstado = (m) => (m.estado === 'tanque' ? 'Tanque móvil' : (ESTADOS[grupoEstado(m)] || ESTADOS.ok).etiqueta);
 const esNoAplica = (m) => grupoEstado(m) === 'na';
+
+// Rótulos según cómo se mide la máquina: horómetro (horas) o kilometraje (km).
+const UNIDADES = {
+  horas: { corto: 'h', medida: 'Horas', trabajado: 'Horas trabajadas', lectura: 'Horómetro', consumo: 'Gal/hora', tope: '24 h por día' },
+  km: { corto: 'km', medida: 'Km', trabajado: 'Km recorridos', lectura: 'Kilometraje', consumo: 'Gal/km', tope: '1.000 km por día' }
+};
+const unidadDe = (m) => UNIDADES[m.unidad === 'km' ? 'km' : 'horas'];
 
 // --- Formatos ----------------------------------------------------------------
 const valido = (n) => n !== null && n !== undefined && Number.isFinite(Number(n));
@@ -108,17 +118,26 @@ function filtrarYOrdenar() {
 // --- Totales del periodo -----------------------------------------------------------
 // Gal/hora de la flota = galones de los tramos ÷ horas, sumando todas las
 // máquinas con horas (no es el promedio de los promedios, que engañaría).
+// Horas y km se suman por separado: nunca se mezclan unidades.
+function sumarConsumo(lista) {
+  const cantidad = lista.reduce((t, m) => t + (Number(m.horasTrabajadas) || 0), 0);
+  const galones = lista.reduce((t, m) => t + (m.horasTrabajadas > 0 ? Number(m.galonesTramos) || 0 : 0), 0);
+  return { cantidad, consumo: cantidad > 0 ? galones / cantidad : null };
+}
 function pintarTotales(lista) {
-  const conHorometro = lista.filter((m) => !esNoAplica(m));
-  const horas = conHorometro.reduce((t, m) => t + (Number(m.horasTrabajadas) || 0), 0);
-  const galonesTramos = conHorometro.reduce((t, m) => t + (m.horasTrabajadas > 0 ? Number(m.galonesTramos) || 0 : 0), 0);
+  const conLectura = lista.filter((m) => !esNoAplica(m));
+  const porHoras = sumarConsumo(conLectura.filter((m) => m.unidad !== 'km'));
+  const porKm = sumarConsumo(conLectura.filter((m) => m.unidad === 'km'));
   const galones = lista.filter((m) => m.estado !== 'tanque').reduce((t, m) => t + m.galones, 0);
   const tanqueos = lista.reduce((t, m) => t + m.cantidadTanqueos, 0);
   document.getElementById('kpi-maquinas').textContent = String(lista.length);
   document.getElementById('kpi-maquinas-nota').textContent = `${tanqueos} tanqueos en el periodo`;
-  document.getElementById('kpi-horas').textContent = `${numero(horas, 1)} h`;
+  document.getElementById('kpi-horas').textContent = `${numero(porHoras.cantidad, 1)} h`;
+  document.getElementById('kpi-km').textContent = `${numero(porKm.cantidad, 0)} km`;
+  document.getElementById('kpi-galkm').textContent =
+    porKm.consumo === null ? 'vehículos por kilometraje' : `${numero(porKm.consumo, 3)} gal/km en vehículos`;
   document.getElementById('kpi-galones').textContent = `${numero(galones, 1)} gal`;
-  document.getElementById('kpi-galh').textContent = horas > 0 ? `${numero(galonesTramos / horas)} gal/h` : '—';
+  document.getElementById('kpi-galh').textContent = porHoras.consumo === null ? '—' : `${numero(porHoras.consumo)} gal/h`;
   return galones;
 }
 
@@ -147,18 +166,25 @@ function dato(etiqueta, valor) {
 }
 
 // Explica por qué un tramo se ajustó (o vacío si no se ajustó).
-function motivoAjuste(t) {
-  if (t.retrocede) return `El horómetro bajó (${numero(t.horasHorometro, 1)} h): se cuentan 0 h`;
-  if (t.ajustado) return `El horómetro marcó ${numero(t.horasHorometro, 1)} h, pero en ese tiempo solo caben ${numero(t.topeHoras, 0)} h (24 h por día)`;
+function motivoAjuste(t, m) {
+  const u = unidadDe(m);
+  const lectura = u.lectura.toLowerCase();
+  if (t.retrocede) return `El ${lectura} bajó (${numero(t.horasHorometro, 1)} ${u.corto}): se cuentan 0 ${u.corto}`;
+  if (t.ajustado)
+    return `El ${lectura} marcó ${numero(t.horasHorometro, 1)} ${u.corto}, pero en ese tiempo solo caben ${numero(t.topeHoras, 0)} ${u.corto} (${u.tope})`;
   return '';
 }
 
 // Fila de la tabla de tanqueos. Si el tramo se ajustó, la fila va en rojo y
 // la columna "Nota" explica por qué.
-function filaTanqueo(t, indice) {
-  const motivo = motivoAjuste(t);
-  const horas = t.horasTramo === null ? (indice === 0 ? 'Primera lectura' : '—') : `${numero(t.horasTramo, 1)} h`;
-  const nota = [motivo ? `⚠ ${motivo}` : '', t.observaciones ? `💬 ${t.observaciones}` : ''].filter(Boolean);
+function filaTanqueo(t, indice, m) {
+  const motivo = motivoAjuste(t, m);
+  const horas = t.horasTramo === null ? (indice === 0 ? 'Primera lectura' : '—') : `${numero(t.horasTramo, 1)} ${unidadDe(m).corto}`;
+  const nota = [
+    t.origen === 'movil' ? '🛢️ Del tanque móvil' : '',
+    motivo ? `⚠ ${motivo}` : '',
+    t.observaciones ? `💬 ${t.observaciones}` : ''
+  ].filter(Boolean);
   return `
     <tr class="${motivo ? 'tanqueo-ajustado' : ''}">
       <td>${escapeHtml(fechaCorta(t.fecha))}</td>
@@ -166,7 +192,7 @@ function filaTanqueo(t, indice) {
       <td>${escapeHtml(t.horometro || '—')}</td>
       <td>${escapeHtml(numero(t.cantidad))}</td>
       <td>${escapeHtml(horas)}</td>
-      <td>${escapeHtml(numero(t.galonesPorHoraTramo))}</td>
+      <td>${escapeHtml(numero(t.galonesPorHoraTramo, m.unidad === 'km' ? 3 : 2))}</td>
       <td class="tanqueo-nota">${nota.map((n) => `<span>${escapeHtml(n)}</span>`).join('') || '—'}</td>
     </tr>`;
 }
@@ -177,7 +203,7 @@ function avisoEstado(m) {
     const n = (m.tramosAjustados || 0) + (m.tramosQueRetroceden || 0);
     return `⚠ ${n} tramo(s) ajustado(s): en la tabla, en rojo, está la lectura que se pasó del tope.`;
   }
-  if (m.estado === 'tanque') return 'Tanque móvil: no tiene horómetro y sus galones no suman al total (luego se reparten a la maquinaria).';
+  if (m.estado === 'tanque') return 'Tanque móvil: no tiene horómetro y sus galones no suman al total (se reparten a cada máquina en la vista Tanque móvil).';
   return grupoEstado(m) === 'ok' ? '' : ESTADOS[grupoEstado(m)].descripcion;
 }
 
@@ -185,19 +211,21 @@ function avisoEstado(m) {
 function htmlDetalle(m) {
   const grupo = grupoEstado(m);
   const aviso = avisoEstado(m);
+  const u = unidadDe(m);
   return `
     <div class="carta-horometro-detalle">
       <div class="grid-campos-registro">
         ${dato('Tanqueos', String(m.cantidadTanqueos))}
         ${dato('Promedio por tanqueo', `${numero(m.promedio)} gal`)}
-        ${dato('Horómetro inicial', numero(m.horometroInicial, 1))}
-        ${dato('Horómetro final', numero(m.horometroFinal, 1))}
+        ${dato(`${u.lectura} inicial`, numero(m.horometroInicial, 1))}
+        ${dato(`${u.lectura} final`, numero(m.horometroFinal, 1))}
+        ${m.galonesMovil > 0 ? dato('Del tanque móvil', `${numero(m.galonesMovil)} gal`) : ''}
       </div>
       ${aviso ? `<p class="carta-horometro-aviso estado-${grupo}">${escapeHtml(aviso)}</p>` : ''}
       <div class="tabla-tanqueos-scroll">
         <table class="tabla-tanqueos">
-          <thead><tr><th>Fecha</th><th>Operario</th><th>Horómetro</th><th>Galones</th><th>Horas trabajadas</th><th>Gal/hora</th><th>Nota</th></tr></thead>
-          <tbody>${m.tanqueos.map(filaTanqueo).join('')}</tbody>
+          <thead><tr><th>Fecha</th><th>Operario</th><th>${u.lectura}</th><th>Galones</th><th>${u.trabajado}</th><th>${u.consumo}</th><th>Nota</th></tr></thead>
+          <tbody>${m.tanqueos.map((t, i) => filaTanqueo(t, i, m)).join('')}</tbody>
         </table>
       </div>
     </div>`;
@@ -208,8 +236,9 @@ function htmlDetalle(m) {
 function crearTarjeta(m, galonesTotales, expandida = false) {
   const grupo = grupoEstado(m);
   const porcentaje = m.estado !== 'tanque' && galonesTotales > 0 ? (m.galones / galonesTotales) * 100 : null;
-  const horas = valido(m.horasTrabajadas) ? `${numero(m.horasTrabajadas, 1)} h` : '—';
-  const galh = valido(m.galonesPorHora) ? numero(m.galonesPorHora) : '—';
+  const u = unidadDe(m);
+  const horas = valido(m.horasTrabajadas) ? `${numero(m.horasTrabajadas, 1)} ${u.corto}` : '—';
+  const galh = valido(m.galonesPorHora) ? numero(m.galonesPorHora, m.unidad === 'km' ? 3 : 2) : '—';
   const textoBoton = expandida
     ? '<span>← Volver a todas las máquinas</span><span aria-hidden="true">✕</span>'
     : `<span>👁 Ver detalles · ${m.cantidadTanqueos} tanqueo${m.cantidadTanqueos === 1 ? '' : 's'}</span><span aria-hidden="true">›</span>`;
@@ -225,8 +254,8 @@ function crearTarjeta(m, galonesTotales, expandida = false) {
     </div>
     <div class="carta-horometro-resumen">
       <div class="carta-horometro-metricas">
-        <div><small>Horas</small><strong>${escapeHtml(horas)}</strong></div>
-        <div class="metrica-galh"><small>Gal/hora</small><strong>${escapeHtml(galh)}</strong></div>
+        <div><small>${u.medida}</small><strong>${escapeHtml(horas)}</strong></div>
+        <div class="metrica-galh"><small>${u.consumo}</small><strong>${escapeHtml(galh)}</strong></div>
         <div><small>Galones</small><strong>${escapeHtml(numero(m.galones, 1))}</strong></div>
       </div>
       <div class="carta-horometro-barra">
@@ -273,16 +302,18 @@ function exportarExcel() {
       m.tanqueos.map(
         (t) =>
           `<tr>${[
-            m.maquina, m.tipo, fechaCorta(t.fecha), t.operario, t.horometro, num(t.cantidad),
-            num(t.horasHorometro, 1), num(t.horasTramo, 1), motivoAjuste(t), num(t.galonesPorHoraTramo), t.observaciones,
+            m.maquina, m.tipo, unidadDe(m).trabajado, fechaCorta(t.fecha), t.origen === 'movil' ? 'Tanque móvil' : 'Tanque principal',
+            t.operario, t.horometro, num(t.cantidad),
+            num(t.horasHorometro, 1), num(t.horasTramo, 1), motivoAjuste(t, m), num(t.galonesPorHoraTramo, 3), t.observaciones,
             m.cantidadTanqueos, num(m.galones), num(m.promedio), num(m.horometroInicial, 1), num(m.horometroFinal, 1),
-            num(m.horasTrabajadas, 1), num(m.galonesPorHora), etiquetaEstado(m)
+            num(m.horasTrabajadas, 1), num(m.galonesPorHora, 3), etiquetaEstado(m)
           ].map(celda).join('')}</tr>`
       )
     )
     .join('');
-  const encabezados = ['Máquina', 'Tipo', 'Fecha', 'Operario', 'Horómetro', 'Galones', 'Horas según horómetro', 'Horas trabajadas (máx. 24 h/día)', 'Ajuste', 'Gal/hora del tramo', 'Observaciones',
-    'Tanqueos (máquina)', 'Galones (máquina)', 'Promedio por tanqueo', 'Horómetro inicial', 'Horómetro final', 'Horas trabajadas (máquina)', 'Gal/hora (máquina)', 'Estado'];
+  // En las máquinas de km, "horas" son km y "gal/hora" es gal/km (columna "Medida").
+  const encabezados = ['Máquina', 'Tipo', 'Medida', 'Fecha', 'Origen', 'Operario', 'Lectura (h o km)', 'Galones', 'Diferencia según la lectura', 'Horas o km del tramo (con tope)', 'Ajuste', 'Gal por h o km del tramo', 'Observaciones',
+    'Tanqueos (máquina)', 'Galones (máquina)', 'Promedio por tanqueo', 'Lectura inicial', 'Lectura final', 'Horas o km (máquina)', 'Gal por h o km (máquina)', 'Estado'];
   const html = `<html><head><meta charset="UTF-8"></head><body><table><thead><tr>${encabezados.map((e) => `<th>${e}</th>`).join('')}</tr></thead><tbody>${filas}</tbody></table></body></html>`;
   const enlace = document.createElement('a');
   enlace.href = URL.createObjectURL(new Blob([html], { type: 'application/vnd.ms-excel' }));

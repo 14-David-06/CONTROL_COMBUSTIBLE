@@ -17,9 +17,13 @@ function crearRutasOperarios(service, auditRepository) {
   // Igual que en tractores: ?selector=1 lo usa el formulario de registro y
   // basta con el permiso 'registro'; si no, se exige el permiso 'operarios'.
   router.get('/operarios', async (req, res, next) => {
-    const permiso = req.query.selector === '1' ? 'registro' : 'operarios';
+    // El selector también lo usa la vista del tanque móvil.
+    const permisos = req.query.selector === '1' ? ['registro', 'tanque_movil'] : ['operarios'];
     try {
-      if (req.user.rol !== 'super_administrador' && !req.user.permisos.includes(permiso))
+      if (
+        req.user.rol !== 'super_administrador' &&
+        !permisos.some((p) => req.user.permisos.includes(p))
+      )
         return res.status(403).json({ mensaje: 'No tienes permiso para consultar operarios.' });
       res.json(await service.list());
     } catch (error) {

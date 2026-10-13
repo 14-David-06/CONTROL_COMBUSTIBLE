@@ -13,7 +13,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/styles.css?v=20261013-2">
-  <link rel="stylesheet" href="../css/theme.css?v=20261013-3">
+  <link rel="stylesheet" href="../css/theme.css?v=20261013-4">
   <title>Horómetros por máquina</title>
   <!-- App instalable (PWA): manifiesto, color de la barra y íconos -->
   <link rel="manifest" href="/manifest.webmanifest">
@@ -70,8 +70,8 @@
           <label for="horometros-orden">Ordenar por</label>
           <select id="horometros-orden">
             <option value="galones">Mayor consumo</option>
-            <option value="horas">Más horas trabajadas</option>
-            <option value="galh">Mayor gal/hora</option>
+            <option value="horas">Más horas / km</option>
+            <option value="galh">Mayor consumo por hora / km</option>
             <option value="revision">Primero las que hay que revisar</option>
             <option value="nombre">Nombre (A–Z)</option>
           </select>
@@ -84,9 +84,10 @@
          filtros; el tanque móvil no suma galones para no contar dos veces). -->
     <section class="kpis-horometros" aria-label="Totales del periodo">
       <div class="kpi-horometro kpi-maquinas"><span aria-hidden="true">🚜</span><div><small>Máquinas</small><strong id="kpi-maquinas">0</strong><em id="kpi-maquinas-nota">en el periodo</em></div></div>
-      <div class="kpi-horometro kpi-horas"><span aria-hidden="true">⏱️</span><div><small>Horas trabajadas</small><strong id="kpi-horas">0 h</strong><em>máx. 24 h por día</em></div></div>
+      <div class="kpi-horometro kpi-horas"><span aria-hidden="true">⏱️</span><div><small>Horas trabajadas</small><strong id="kpi-horas">0 h</strong><em>máquinas por horómetro</em></div></div>
+      <div class="kpi-horometro kpi-km"><span aria-hidden="true">🚚</span><div><small>Km recorridos</small><strong id="kpi-km">0 km</strong><em id="kpi-galkm">vehículos por kilometraje</em></div></div>
       <div class="kpi-horometro kpi-galones"><span aria-hidden="true">⛽</span><div><small>Galones suministrados</small><strong id="kpi-galones">0 gal</strong><em>sin el tanque móvil</em></div></div>
-      <div class="kpi-horometro kpi-galh"><span aria-hidden="true">💧</span><div><small>Consumo promedio</small><strong id="kpi-galh">—</strong><em>gal/hora de la flota</em></div></div>
+      <div class="kpi-horometro kpi-galh"><span aria-hidden="true">💧</span><div><small>Consumo promedio</small><strong id="kpi-galh">—</strong><em>gal/hora (máquinas por horómetro)</em></div></div>
     </section>
 
     <div class="horometros-layout">
@@ -111,6 +112,6 @@
   <script src="../js/shell.js"></script>
   <!-- Control de acceso: es parte de Reportes, exige el mismo permiso -->
   <script>if (protegerVista('reportes')) { aplicarPermisosEnlaces(); }</script>
-  <script src="../js/horometros.js?v=20261013-2"></script>
+  <script src="../js/horometros.js?v=20261013-3"></script>
 </body>
 </html>

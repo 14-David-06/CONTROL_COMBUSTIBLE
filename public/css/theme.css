@@ -319,7 +319,7 @@ label { color:var(--cc-texto);font-weight:700 }
 .controles-horometros-filtros button { white-space:nowrap }
 
 /* Totales del periodo */
-.kpis-horometros { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:14px }
+.kpis-horometros { display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin-top:14px }
 .kpi-horometro { display:flex;align-items:center;gap:12px;padding:16px;border:1px solid var(--cc-borde);border-radius:var(--cc-radio);background:var(--cc-superficie);box-shadow:var(--cc-sombra) }
 .kpi-horometro > span { width:46px;height:46px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;font-size:1.35rem }
 .kpi-horometro small { display:block;color:var(--cc-muted);font-size:.78rem;font-weight:700 }
@@ -328,6 +328,7 @@ label { color:var(--cc-texto);font-weight:700 }
 .kpi-maquinas > span { background:var(--cc-azul-suave) }
 .kpi-horas > span { background:var(--cc-verde-suave) }
 .kpi-galones > span { background:var(--cc-morado-suave) }
+.kpi-km > span { background:var(--cc-amarillo-suave) }
 .kpi-galh > span { background:var(--cc-naranja-suave) }
 .kpi-galh { border-color:#efc9b6;background:linear-gradient(180deg,#fff,var(--cc-naranja-suave)) }
 .kpi-galh strong { color:var(--cc-naranja) }
@@ -406,6 +407,7 @@ label { color:var(--cc-texto);font-weight:700 }
   .horometros-layout { grid-template-columns:minmax(0,1fr) }
   .horometros-lateral { position:static;order:-1 } /* En tablet y celular los estados van arriba de las cartas */
   .kpis-horometros { grid-template-columns:repeat(2,minmax(0,1fr)) }
+  .kpis-horometros .kpi-galh { grid-column:1 / -1 } /* 5 cuadros: el último ocupa toda la fila */
 }
 @media(max-width:700px) {
   .controles-horometros-filtros { grid-template-columns:1fr 1fr }
@@ -468,4 +470,57 @@ label { color:var(--cc-texto);font-weight:700 }
 }
 @media(max-width:420px) {
   .kpis-reporte { grid-template-columns:1fr }
+}
+
+/* ---------------------------------------------------------------------------
+   Vista "Tanque móvil" (tanque-movil.html / tanque-movil.js): fecha, cuadre del
+   día (cargado, repartido, saldo), formulario y tabla de entregas.
+   Saldo: verde = cuadra, amarillo = le queda combustible, rojo = se repartió de más.
+   --------------------------------------------------------------------------- */
+.tm-barra { display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap }
+.tm-barra label { display:block;margin-bottom:5px;font-size:.82rem }
+.tm-solo-supervisor { padding:6px 12px;border-radius:999px;background:var(--cc-verde-suave);color:var(--cc-verde-oscuro);font-size:.8rem;font-weight:800 }
+.tm-cuadre { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:14px 0 }
+.tm-kpi { display:flex;align-items:center;gap:14px;padding:18px;border:1px solid var(--cc-borde);border-radius:var(--cc-radio);background:var(--cc-superficie);box-shadow:var(--cc-sombra) }
+.tm-kpi > span { width:52px;height:52px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;background:var(--cc-verde-suave);font-size:1.5rem }
+.tm-kpi small { display:block;color:var(--cc-muted);font-size:.8rem;font-weight:700 }
+.tm-kpi strong { display:block;margin:2px 0;font-size:1.7rem;line-height:1.1;color:var(--cc-texto) }
+.tm-kpi em { display:block;color:var(--cc-muted);font-size:.78rem;font-style:normal }
+.tm-kpi.tm-verde { border-color:#b9d7bf }
+.tm-kpi.tm-verde strong { color:var(--cc-verde-oscuro) }
+.tm-kpi.tm-amarillo { border-color:#e8d8a8;background:linear-gradient(180deg,#fff,var(--cc-amarillo-suave)) }
+.tm-kpi.tm-amarillo > span { background:var(--cc-amarillo-suave) }
+.tm-kpi.tm-amarillo strong { color:#7f6121 }
+.tm-kpi.tm-rojo { border-color:#f0c5c1;background:linear-gradient(180deg,#fff,var(--cc-rojo-suave)) }
+.tm-kpi.tm-rojo > span { background:var(--cc-rojo-suave) }
+.tm-kpi.tm-rojo strong,.tm-kpi.tm-rojo em { color:#9d3027 }
+.tm-titulo { margin:0 0 14px;font-size:1.05rem }
+.tm-formulario { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px;align-items:start }
+.tm-formulario label { display:block;margin-bottom:5px;font-size:.85rem }
+.tm-formulario input,.tm-formulario select { width:100% }
+.tm-formulario input[readonly] { background:#eef1ee;color:var(--cc-muted) }
+.tm-ayuda { display:block;margin-top:4px;color:var(--cc-muted);font-size:.75rem }
+.tm-botones { grid-column:1 / -1;display:flex;gap:10px;flex-wrap:wrap }
+.tm-tabla-panel { margin-top:14px }
+.tm-tabla-scroll { overflow-x:auto }
+.tm-tabla { width:100%;min-width:640px;border-collapse:collapse;font-size:.9rem } /* Anula el min-width:1080px general de las tablas */
+.tm-tabla th { padding:10px 12px;background:var(--cc-verde-suave);color:var(--cc-verde-oscuro);text-align:left;font-size:.8rem;white-space:nowrap }
+.tm-tabla td { padding:10px 12px;border-bottom:1px solid var(--cc-borde);vertical-align:middle;text-align:left }
+.tm-acciones { display:flex;gap:6px;flex-wrap:wrap }
+.tm-acciones button { min-height:36px!important;padding:4px 10px!important;font-size:.8rem }
+@media(max-width:900px) {
+  .tm-cuadre { grid-template-columns:1fr }
+  .tm-formulario { grid-template-columns:1fr 1fr }
+}
+@media(max-width:600px) {
+  .tm-formulario { grid-template-columns:1fr }
+  .tm-kpi { padding:14px }
+  .tm-kpi strong { font-size:1.35rem }
+  /* En el celular la tabla se lee como tarjetas: cada fila en bloque */
+  .tm-tabla,.tm-tabla tbody { display:block;min-width:0 }
+  .tm-tabla thead { display:none }
+  .tm-tabla tr { display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;padding:10px 0;border-bottom:1px solid var(--cc-borde) }
+  .tm-tabla td,.tm-tabla tbody tr:nth-child(even) td { padding:0;border:0;background:transparent }
+  .tm-tabla td.tm-acciones { grid-column:1 / -1;margin-top:6px;flex-wrap:nowrap }
+  .tm-acciones button { flex:1;width:auto }
 }

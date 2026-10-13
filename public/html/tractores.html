@@ -71,11 +71,13 @@
         </div>
 
         <div>
-          <label for="tractor-horometro-form">Horómetro</label>
-          <!-- "No aplica": al registrar combustible el horómetro queda como N/A
-               y no se genera alerta de horómetro (columna sin_horometro) -->
+          <label for="tractor-horometro-form">Lectura</label>
+          <!-- Horómetro = horas trabajadas; Kilometraje = km recorridos (columna
+               unidad_medida='km', vehículos con placa). "No aplica": al registrar
+               combustible queda N/A y no hay alerta (columna sin_horometro). -->
           <select id="tractor-horometro-form" required>
-            <option value="valido">Válido (se registra el horómetro)</option>
+            <option value="horas">Horómetro (horas trabajadas)</option>
+            <option value="km">Kilometraje (km recorridos)</option>
             <option value="na">No aplica (se registra N/A, sin alerta)</option>
           </select>
         </div>

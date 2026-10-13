@@ -36,6 +36,7 @@ const GRUPOS_PERMISOS = [
     permisos: [
       { vista: 'tablas', etiqueta: 'Ver registros' },
       { vista: 'reportes', etiqueta: 'Ver reportes' },
+      { vista: 'tanque_movil', etiqueta: 'Registrar entregas del tanque móvil' },
       { vista: 'alertas', etiqueta: 'Justificar alertas' },
       { vista: 'auditoria', etiqueta: 'Consultar auditoría' }
     ]

@@ -8,6 +8,8 @@ const { TractorRepository } = require('../domain/tractor.repository');
 const { textoFormula } = require('../../shared/infrastructure/airtable-formula');
 
 const TABLA = 'tractores';
+// 'km' = la lectura es kilometraje; cualquier otro valor (o vacío) = horómetro.
+const unidadDe = (valor) => (String(valor || '').trim().toLowerCase() === 'km' ? 'km' : 'horas');
 const soloColumnas = ({
   id,
   item,
@@ -15,7 +17,8 @@ const soloColumnas = ({
   descripcion,
   centro_costo,
   capacidad_galones,
-  sin_horometro
+  sin_horometro,
+  unidad_medida
 }) => ({
   id,
   item,
@@ -23,7 +26,8 @@ const soloColumnas = ({
   descripcion,
   centro_costo,
   capacidad_galones,
-  sin_horometro: Boolean(sin_horometro) // Casilla vacía en Airtable = no viene el campo
+  sin_horometro: Boolean(sin_horometro), // Casilla vacía en Airtable = no viene el campo
+  unidad_medida: unidadDe(unidad_medida)
 });
 
 class AirtableTractorRepository extends TractorRepository {
@@ -71,6 +75,7 @@ class AirtableTractorRepository extends TractorRepository {
       .toUpperCase();
     const capacidad_galones = Number(datos.capacidad_galones || 0);
     const sin_horometro = Boolean(datos.sin_horometro);
+    const unidad_medida = unidadDe(datos.unidad_medida);
     const [fila] = await this.cliente.crear(TABLA, [
       {
         item,
@@ -79,6 +84,7 @@ class AirtableTractorRepository extends TractorRepository {
         centro_costo,
         capacidad_galones,
         sin_horometro,
+        unidad_medida: unidad_medida === 'km' ? 'km' : '',
         estado: 'ACTIVO'
       }
     ]);
@@ -89,7 +95,8 @@ class AirtableTractorRepository extends TractorRepository {
       descripcion,
       centro_costo,
       capacidad_galones,
-      sin_horometro
+      sin_horometro,
+      unidad_medida
     };
   }
 
@@ -107,8 +114,19 @@ class AirtableTractorRepository extends TractorRepository {
       .toUpperCase();
     const capacidad_galones = Number(datos.capacidad_galones || 0);
     const sin_horometro = Boolean(datos.sin_horometro);
+    const unidad_medida = unidadDe(datos.unidad_medida);
     await this.cliente.actualizar(TABLA, [
-      { id, campos: { maquina, descripcion, centro_costo, capacidad_galones, sin_horometro } }
+      {
+        id,
+        campos: {
+          maquina,
+          descripcion,
+          centro_costo,
+          capacidad_galones,
+          sin_horometro,
+          unidad_medida: unidad_medida === 'km' ? 'km' : ''
+        }
+      }
     ]);
     return {
       id,
@@ -117,7 +135,8 @@ class AirtableTractorRepository extends TractorRepository {
       descripcion,
       centro_costo,
       capacidad_galones,
-      sin_horometro
+      sin_horometro,
+      unidad_medida
     };
   }
 

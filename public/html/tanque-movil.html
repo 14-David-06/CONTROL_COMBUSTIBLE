@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<!-- ==========================================================================
+     tanque-movil.html — ENTREGAS DEL TANQUE MÓVIL (solo supervisor)
+     El supervisor pasa la planilla del tanque móvil: qué máquina recibió
+     cuántos galones en el campo. Arriba, el cuadre del día (cargado al móvil
+     desde el tanque principal, repartido y saldo). No toca la jornada, las
+     lecturas M1/M2 ni el cierre del tanque principal.
+     Lógica en ../js/tanque-movil.js. Requiere el permiso 'tanque_movil'.
+     ========================================================================== -->
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="../css/styles.css?v=20261013-2">
+  <link rel="stylesheet" href="../css/theme.css?v=20261013-4">
+  <title>Tanque móvil</title>
+  <!-- App instalable (PWA): manifiesto, color de la barra y íconos -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#1f4d36">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Combustible">
+  <link rel="icon" type="image/png" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <script src="/js/pwa.js" defer></script>
+</head>
+<body>
+  <main class="pantalla vista-tanque-movil">
+    <header class="encabezado encabezado-compacto">
+      <div class="encabezado-control">
+        <div class="logo encabezado-logo"><img src="../assets/WhatsApp Image 2026-08-11 at 6.40.45 AM.jpeg" alt="Logo Guaicaramo SAS"></div>
+        <div><span class="eyebrow-dashboard">OPERACIÓN</span><h1>Tanque móvil</h1></div>
+      </div>
+      <div class="ubicacion ubicacion-compacta"><strong>Barranca de Upía, Meta</strong><span data-fecha-encabezado></span></div>
+      <button class="boton-tres-puntos" type="button" aria-label="Abrir menú" aria-expanded="false"><span></span><span></span><span></span></button>
+    </header>
+
+    <!-- Fecha del día que se está cuadrando -->
+    <section class="panel tm-barra">
+      <div>
+        <label for="tm-fecha">Día de la planilla</label>
+        <input type="date" id="tm-fecha" autocomplete="off">
+      </div>
+      <span class="tm-solo-supervisor">🛡 Solo supervisor</span>
+    </section>
+
+    <!-- CUADRE DEL DÍA -->
+    <section class="tm-cuadre" aria-label="Cuadre del día">
+      <div class="tm-kpi"><span aria-hidden="true">⛽</span><div><small>Cargado al móvil</small><strong id="tm-cargado">0 gal</strong><em id="tm-cargado-nota">desde el tanque principal</em></div></div>
+      <div class="tm-kpi"><span aria-hidden="true">🚜</span><div><small>Repartido a máquinas</small><strong id="tm-repartido">0 gal</strong><em id="tm-repartido-nota">0 entregas</em></div></div>
+      <div class="tm-kpi" id="tm-kpi-saldo"><span aria-hidden="true">🛢️</span><div><small>Saldo en el móvil</small><strong id="tm-saldo">0 gal</strong><em id="tm-saldo-nota">—</em></div></div>
+    </section>
+
+    <!-- FORMULARIO (también sirve para editar una entrega) -->
+    <section class="panel">
+      <h2 class="tm-titulo" id="tm-titulo-form">Registrar entrega de combustible</h2>
+      <form id="tm-formulario" class="tm-formulario" autocomplete="off">
+        <div>
+          <label for="tm-maquina">Máquina</label>
+          <select id="tm-maquina" required><option value="">Seleccione una máquina</option></select>
+        </div>
+        <div>
+          <label for="tm-operario">Operario</label>
+          <input id="tm-operario" list="tm-lista-operarios" maxlength="80" placeholder="Nombre del operario">
+          <datalist id="tm-lista-operarios"></datalist>
+        </div>
+        <div>
+          <label for="tm-horometro" id="tm-etiqueta-lectura">Horómetro (h)</label>
+          <input id="tm-horometro" maxlength="40" inputmode="decimal" placeholder="Ej: 1530.5">
+          <small class="tm-ayuda" id="tm-ayuda-lectura">Elige la máquina y se indica si es horómetro o kilometraje.</small>
+        </div>
+        <div>
+          <label for="tm-cantidad">Galones</label>
+          <input id="tm-cantidad" type="number" min="0.1" step="0.1" inputmode="decimal" placeholder="Ej: 20" required>
+        </div>
+        <div>
+          <label for="tm-salida">Número de salida (opcional)</label>
+          <input id="tm-salida" maxlength="30" placeholder="Ej: 000123">
+        </div>
+        <div>
+          <label for="tm-observaciones">Observaciones</label>
+          <input id="tm-observaciones" maxlength="500" placeholder="Observaciones adicionales">
+        </div>
+        <div class="tm-botones">
+          <button type="submit" class="boton-principal" id="tm-guardar">+ Agregar</button>
+          <button type="button" class="boton-secundario" id="tm-cancelar" hidden>Cancelar edición</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ENTREGAS DEL DÍA -->
+    <section class="panel tm-tabla-panel">
+      <h2 class="tm-titulo">Entregas del día</h2>
+      <div class="tm-tabla-scroll">
+        <table class="tm-tabla">
+          <thead><tr><th>Máquina</th><th>Operario</th><th>Horómetro / Km</th><th>Galones</th><th>N.º salida</th><th>Acciones</th></tr></thead>
+          <tbody id="tm-filas"></tbody>
+        </table>
+      </div>
+      <p class="tabla-vacia" id="tm-vacio" hidden>Todavía no hay entregas registradas para este día.</p>
+    </section>
+  </main>
+
+  <script src="/vendor/sweetalert2.all.min.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/shell.js"></script>
+  <script>if (protegerVista('tanque_movil')) { aplicarPermisosEnlaces(); }</script>
+  <script src="../js/tanque-movil.js?v=20261013-1"></script>
+</body>
+</html>

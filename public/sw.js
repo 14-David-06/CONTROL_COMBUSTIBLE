@@ -13,7 +13,7 @@
 // avisa si falta).
 // ============================================================================
 
-const VERSION = 'v8-2026-10-13';
+const VERSION = 'v9-2026-10-13';
 const CACHE = `combustible-${VERSION}`;
 
 const PAGINAS = [
@@ -27,6 +27,7 @@ const PAGINAS = [
   '/reportes',
   '/reporte-detalle',
   '/horometros',
+  '/tanque-movil',
   '/alertas',
   '/auditoria',
   '/cambiar-contrasena'
@@ -58,6 +59,7 @@ const PRECACHE = [
   '/js/shell.js',
   '/js/sidebar.js',
   '/js/tablas.js',
+  '/js/tanque-movil.js',
   '/js/tractores.js',
   '/js/usuarios.js'
 ];

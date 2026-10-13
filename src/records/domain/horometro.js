@@ -16,15 +16,21 @@
 //   * Horas trabajadas de la máquina = suma de sus tramos (ya con topes).
 //   * Gal/hora = galones cargados en esos tramos ÷ horas trabajadas. La
 //     primera carga no entra: se gastó antes de la primera lectura medida.
+// VEHÍCULOS POR KILOMETRAJE (unidad_medida='km' en Tractores): la misma regla,
+// pero la lectura son km, el tope es KM_MAXIMOS_POR_DIA y el resultado se lee
+// como "km recorridos" y "galones por km" (los nombres de los campos no cambian:
+// horasTrabajadas = km y galonesPorHora = gal/km).
 // La pantalla del reporte aplica esta MISMA regla (reporte-detalle.js ->
 // calcularReporteHorometros): si cambias algo aquí, cámbialo también allá.
-// PARA CAMBIAR EL TOPE DIARIO -> HORAS_MAXIMAS_POR_DIA.
+// PARA CAMBIAR EL TOPE DIARIO -> HORAS_MAXIMAS_POR_DIA / KM_MAXIMOS_POR_DIA.
 // ============================================================================
 
 const HORAS_MAXIMAS_POR_DIA = 24;
+const KM_MAXIMOS_POR_DIA = 1000; // Un camión no recorre más de esto en un día
 const HOROMETRO_NUMERICO = /^[0-9]+([.,][0-9]+)?$/; // Solo dígitos con coma o punto decimal
 const MS_POR_DIA = 86400000;
 const redondear = (n) => Math.round(n * 100) / 100;
+const redondear3 = (n) => Math.round(n * 1000) / 1000;
 
 // Lectura numérica del horómetro, o null si es texto ("Horómetro dañado").
 function leerHorometro(valor) {
@@ -33,7 +39,9 @@ function leerHorometro(valor) {
 }
 
 // tanqueos: [{ fecha:'YYYY-MM-DD', registradoEn, horometro, cantidad }] de UNA máquina.
-function calcularHorometro(tanqueos) {
+// unidad: 'horas' (horómetro) o 'km' (kilometraje); solo cambia el tope diario.
+function calcularHorometro(tanqueos, { unidad = 'horas' } = {}) {
+  const maximoPorDia = unidad === 'km' ? KM_MAXIMOS_POR_DIA : HORAS_MAXIMAS_POR_DIA;
   const ordenados = [...tanqueos].sort(
     (a, b) =>
       String(a.fecha).localeCompare(String(b.fecha)) ||
@@ -67,8 +75,8 @@ function calcularHorometro(tanqueos) {
       const dias = Math.round((Date.parse(t.fecha) - Date.parse(anterior.fecha)) / MS_POR_DIA);
       const tope =
         dias >= 1
-          ? dias * HORAS_MAXIMAS_POR_DIA
-          : Math.max(0, HORAS_MAXIMAS_POR_DIA - (horasMismoDia.get(t.fecha) || 0));
+          ? dias * maximoPorDia
+          : Math.max(0, maximoPorDia - (horasMismoDia.get(t.fecha) || 0));
       const diferencia = redondear(lectura - anterior.horas);
       fila.horasHorometro = diferencia;
       fila.topeHoras = tope;
@@ -93,10 +101,11 @@ function calcularHorometro(tanqueos) {
     horometroFinal: anterior ? anterior.horas : null,
     horasTrabajadas: horas,
     galonesTramos: cantidadTramos ? redondear(galonesTramos) : null, // Galones que entran al gal/hora
-    galonesPorHora: horas > 0 ? redondear(galonesTramos / horas) : null,
+    // En km el consumo es pequeño (0,02 gal/km): se guardan 3 decimales.
+    galonesPorHora: horas > 0 ? (unidad === 'km' ? redondear3(galonesTramos / horas) : redondear(galonesTramos / horas)) : null,
     tramosAjustados,
     tramosQueRetroceden
   };
 }
 
-module.exports = { calcularHorometro, leerHorometro, HORAS_MAXIMAS_POR_DIA };
+module.exports = { calcularHorometro, leerHorometro, HORAS_MAXIMAS_POR_DIA, KM_MAXIMOS_POR_DIA };

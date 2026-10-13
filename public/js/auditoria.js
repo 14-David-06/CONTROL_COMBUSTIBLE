@@ -278,6 +278,7 @@ const MODULO_TABLA = {
   reportes: ['📊', 'Reportes'],
   surtidor: ['🛢️', 'Surtidor'],
   jornadas: ['📅', 'Jornadas'],
+  tanque_movil: ['🛢️', 'Tanque móvil'],
   auditoria: ['🛡️', 'Auditoría']
 };
 // Rol legible: "super_administrador" -> "Super administrador".

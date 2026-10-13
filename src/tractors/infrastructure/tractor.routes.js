@@ -19,9 +19,13 @@ function crearRutasTractores(service, auditRepository) {
   // registro (?selector=1) basta con el permiso 'registro'; si viene de la
   // pantalla de administración se exige el permiso 'tractores'.
   router.get('/tractores', async (req, res, next) => {
-    const permiso = req.query.selector === '1' ? 'registro' : 'tractores';
+    // El selector también lo usa la vista del tanque móvil.
+    const permisos = req.query.selector === '1' ? ['registro', 'tanque_movil'] : ['tractores'];
     try {
-      if (req.user.rol !== 'super_administrador' && !req.user.permisos.includes(permiso))
+      if (
+        req.user.rol !== 'super_administrador' &&
+        !permisos.some((p) => req.user.permisos.includes(p))
+      )
         return res.status(403).json({ mensaje: 'No tienes permiso para consultar máquinas.' });
       res.json(await service.list());
     } catch (error) {

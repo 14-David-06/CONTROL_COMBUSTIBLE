@@ -330,6 +330,11 @@ function maquinaSinHorometro(tractor) {
   return esTanqueMovil(tractor) || Boolean(tractor?.sin_horometro);
 }
 
+// Vehículos que se miden por kilometraje (unidad_medida='km' en Tractores); el resto, por horómetro.
+function nombreLectura(tractor) {
+  return tractor?.unidad_medida === 'km' ? 'Kilometraje' : 'Horómetro';
+}
+
 // ¿Ya se respondieron las tres preguntas de la inspección del día?
 function inspeccionCompleta() {
   return ['fuga-biodiesel', 'sistema-electrico', 'parada-emergencia'].every((nombre) => obtenerValorChequeo(nombre) !== '');
@@ -538,9 +543,10 @@ async function validarRegistroAntesDeGuardar(registro) {
     const ultimoHorometro = obtenerUltimoHorometroMaquina(registros, registro.maquina);
 
     if (ultimoHorometro && horometroNuevo < ultimoHorometro) {
+      const lectura = nombreLectura(tractoresDisponibles.find((t) => String(t.maquina || '').toUpperCase() === String(registro.maquina || '').toUpperCase()));
       await mostrarAlertaError(
-        'Horometro menor',
-        `El horometro no puede ser menor al ultimo registrado para ${registro.maquina}: ${ultimoHorometro}.`
+        `${lectura} menor`,
+        `El ${lectura.toLowerCase()} no puede ser menor al último registrado para ${registro.maquina}: ${ultimoHorometro}.`
       );
       return false;
     }
@@ -582,6 +588,7 @@ function crearPuestoRegistro(sufijo, etiqueta) {
   const miniOperario = el('mini-operario');
   const indicadorCapacidad = el('indicador-capacidad');
   const confirmacionRegistro = el('confirmacion-registro');
+  const etiquetaHorometro = document.querySelector(`label[for="horometro-${sufijo}"]`);
 
   const api = { firmaOperario, botonAbrirFirma, renderizarMaquinas, renderizarOperarios, contenedorMaquinas };
 
@@ -597,6 +604,11 @@ function crearPuestoRegistro(sufijo, etiqueta) {
       if (tractorSeleccionado) resumenMaquinaSeleccionada.innerHTML = `✓ <strong>${escapeHtml(tractorSeleccionado.maquina)}</strong> · ${escapeHtml(tractorSeleccionado.descripcion || 'Sin descripción')} · Tanque ${Number(tractorSeleccionado.capacidad_galones || tractorSeleccionado.capacidad || 0).toFixed(2)} gal`;
     }
     actualizarIndicadorCapacidad();
+
+    // La etiqueta dice "Kilometraje (km)" en los vehículos y "Horómetro (h)" en el resto.
+    const esKm = tractorSeleccionado?.unidad_medida === 'km';
+    if (etiquetaHorometro) etiquetaHorometro.textContent = esKm ? 'Kilometraje (km)' : 'Horómetro (h)';
+    horometro.placeholder = esKm ? 'Ej: 99829' : 'Ej: 1530.5';
 
     // Sin horómetro (tanque móvil o marcada así en Tractores): se fija N/A y no se puede cambiar.
     if (maquinaSinHorometro(tractorSeleccionado)) {
@@ -634,7 +646,7 @@ function crearPuestoRegistro(sufijo, etiqueta) {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = `selector-card ${normalizarBusquedaMaquina(maquina.value) === normalizarBusquedaMaquina(t.maquina) ? 'seleccionada' : ''}`;
-      b.innerHTML = `<span class="selector-card-icon">🚜</span><span><strong>${escapeHtml(t.maquina)}</strong><small>${escapeHtml(t.descripcion || 'Sin descripción')}</small><em>Tanque: ${Number(t.capacidad_galones || t.capacidad || 0).toFixed(2)} gal</em></span><b>→</b>`;
+      b.innerHTML = `<span class="selector-card-icon">${t.unidad_medida === 'km' ? '🚚' : '🚜'}</span><span><strong>${escapeHtml(t.maquina)}</strong><small>${escapeHtml(t.descripcion || 'Sin descripción')}</small><em>Tanque: ${Number(t.capacidad_galones || t.capacidad || 0).toFixed(2)} gal</em></span><b>→</b>`;
       b.onclick = () => { maquina.value = t.maquina; mostrarDatosTractorSeleccionado(); renderizarMaquinas(tractoresDisponibles, buscadorMaquina?.value); };
       contenedorMaquinas.appendChild(b);
     });
@@ -662,7 +674,7 @@ function crearPuestoRegistro(sufijo, etiqueta) {
   function actualizarConfirmacion() {
     if (!confirmacionRegistro) return;
     const t = tractoresDisponibles.find(x => normalizarBusquedaMaquina(x.maquina) === normalizarBusquedaMaquina(maquina.value));
-    confirmacionRegistro.innerHTML = `<div class="confirmacion-linea"><span>🚜</span><div><small>Máquina</small><strong>${escapeHtml(maquina.value || '—')}</strong><em>${escapeHtml(t?.descripcion || tractorDescripcion.value || '')}</em></div></div><div class="confirmacion-linea"><span>👤</span><div><small>Operario</small><strong>${escapeHtml(nombreOperario.value || '—')}</strong><em>Cédula: ${escapeHtml(cedulaOperario.value || '—')}</em></div></div><div class="confirmacion-linea"><span>⛽</span><div><small>Cantidad</small><strong>${Number(cantidad.value || 0).toFixed(2)} GAL</strong><em>Horómetro: ${escapeHtml(horometro.value || '—')}</em></div></div><div class="confirmacion-linea"><span>📄</span><div><small>Soporte</small><strong>${escapeHtml(numeroSai.value || 'Sin SAI')}</strong><em>${firmaOperario.value ? '✓ Firma guardada' : '⚠ Falta firma'}</em></div></div>`;
+    confirmacionRegistro.innerHTML = `<div class="confirmacion-linea"><span>🚜</span><div><small>Máquina</small><strong>${escapeHtml(maquina.value || '—')}</strong><em>${escapeHtml(t?.descripcion || tractorDescripcion.value || '')}</em></div></div><div class="confirmacion-linea"><span>👤</span><div><small>Operario</small><strong>${escapeHtml(nombreOperario.value || '—')}</strong><em>Cédula: ${escapeHtml(cedulaOperario.value || '—')}</em></div></div><div class="confirmacion-linea"><span>⛽</span><div><small>Cantidad</small><strong>${Number(cantidad.value || 0).toFixed(2)} GAL</strong><em>${nombreLectura(t)}: ${escapeHtml(horometro.value || '—')}${t?.unidad_medida === 'km' && horometro.value && horometro.value !== 'N/A' ? ' km' : ''}</em></div></div><div class="confirmacion-linea"><span>📄</span><div><small>Soporte</small><strong>${escapeHtml(numeroSai.value || 'Sin SAI')}</strong><em>${firmaOperario.value ? '✓ Firma guardada' : '⚠ Falta firma'}</em></div></div>`;
   }
 
   // Aviso en vivo mientras se escribe la cantidad: verde (normal), naranja

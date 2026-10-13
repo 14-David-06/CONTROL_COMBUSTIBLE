@@ -14,6 +14,7 @@ const VISTAS_DISPONIBLES = [
   'tractores', // Administración de maquinaria
   'operarios', // Administración de operarios
   'reportes', // Cierres mensuales
+  'tanque_movil', // Entregas del tanque móvil a cada máquina (supervisor)
   'alertas', // Bandeja de alertas
   'auditoria' // Bitácora del sistema
 ];

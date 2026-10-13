@@ -13,7 +13,13 @@ const tractorMaquina = document.getElementById('tractor-maquina');
 const tractorDescripcion = document.getElementById('tractor-descripcion-form');
 const tractorCentroCosto = document.getElementById('tractor-centro-costo-form');
 const tractorCapacidad = document.getElementById('tractor-capacidad-form');
-const tractorHorometro = document.getElementById('tractor-horometro-form'); // "valido" | "na"
+const tractorHorometro = document.getElementById('tractor-horometro-form'); // "horas" | "km" | "na"
+
+// Tipo de lectura de una máquina para el select: horómetro, kilometraje o no aplica.
+const tipoLectura = (tractor) => (tractor.sin_horometro ? 'na' : tractor.unidad_medida === 'km' ? 'km' : 'horas');
+// Lo que se envía al servidor según el select.
+const datosLectura = (valor) => ({ sin_horometro: valor === 'na', unidad_medida: valor === 'km' ? 'km' : 'horas' });
+const TEXTO_LECTURA = { horas: 'Horómetro (horas)', km: 'Kilometraje (km)', na: 'No aplica (N/A)' };
 const cuerpoTablaTractores = document.getElementById('cuerpo-tabla-tractores');
 const cantidadTractores = document.getElementById('cantidad-tractores');
 
@@ -104,7 +110,7 @@ function pintarTractores(tractores, consumoPorMaquina = new Map()) {
       <div class="datos-tractor-card">
         <div class="dato-registro"><span>Centro de costo</span><strong class="centro-registro"></strong></div>
         <div class="dato-registro"><span>Capacidad del tanque</span><strong class="capacidad-registro"></strong></div>
-        <div class="dato-registro"><span>Horómetro</span><strong class="horometro-registro"></strong></div>
+        <div class="dato-registro"><span>Lectura</span><strong class="horometro-registro"></strong></div>
       </div>
       <div class="consumo-tractor-card"></div>
       <div class="acciones-registro"></div>`;
@@ -112,7 +118,7 @@ function pintarTractores(tractores, consumoPorMaquina = new Map()) {
     tarjeta.querySelector('.maquina-registro').textContent = tractor.maquina || 'SIN MÁQUINA';
     tarjeta.querySelector('.descripcion-registro').textContent = tractor.descripcion || 'Sin descripción';
     tarjeta.querySelector('.badge-tipo-maquina').textContent = tipoDeMaquina(tractor.descripcion);
-    tarjeta.querySelector('.horometro-registro').textContent = tractor.sin_horometro ? 'No aplica (N/A)' : 'Válido';
+    tarjeta.querySelector('.horometro-registro').textContent = TEXTO_LECTURA[tipoLectura(tractor)];
     tarjeta.querySelector('.centro-registro').textContent = tractor.centro_costo || '—';
     tarjeta.querySelector('.capacidad-registro').textContent = `${Number.isFinite(capacidad) ? capacidad.toFixed(2) : '0.00'} gal`;
 
@@ -162,7 +168,7 @@ function activarEdicionTractor(tarjeta, tractor) {
       <label>Descripción<input class="ed-descripcion" type="text" maxlength="150" required></label>
       <label>Centro de costo<input class="ed-centro" type="text" maxlength="20" required></label>
       <label>Capacidad (galones)<input class="ed-capacidad" type="number" min="0" step="0.01" required></label>
-      <label>Horómetro<select class="ed-horometro"><option value="valido">Válido (se registra el horómetro)</option><option value="na">No aplica (se registra N/A, sin alerta)</option></select></label>
+      <label>Lectura<select class="ed-horometro"><option value="horas">Horómetro (horas trabajadas)</option><option value="km">Kilometraje (km recorridos)</option><option value="na">No aplica (se registra N/A, sin alerta)</option></select></label>
     </div>
     <div class="acciones-registro"></div>`;
 
@@ -171,7 +177,7 @@ function activarEdicionTractor(tarjeta, tractor) {
   tarjeta.querySelector('.ed-descripcion').value = tractor.descripcion ?? '';
   tarjeta.querySelector('.ed-centro').value = tractor.centro_costo ?? '';
   tarjeta.querySelector('.ed-capacidad').value = Number.isFinite(capacidad) ? capacidad : 0;
-  tarjeta.querySelector('.ed-horometro').value = tractor.sin_horometro ? 'na' : 'valido';
+  tarjeta.querySelector('.ed-horometro').value = tipoLectura(tractor);
 
   const acciones = tarjeta.querySelector('.acciones-registro');
   const botonGuardar = document.createElement('button');
@@ -195,7 +201,7 @@ async function guardarEdicionTractor(tarjeta, tractor) {
     descripcion: tarjeta.querySelector('.ed-descripcion').value.trim().toUpperCase(),
     centro_costo: tarjeta.querySelector('.ed-centro').value.trim().toUpperCase(),
     capacidad_galones: Number(tarjeta.querySelector('.ed-capacidad').value || 0),
-    sin_horometro: tarjeta.querySelector('.ed-horometro').value === 'na'
+    ...datosLectura(tarjeta.querySelector('.ed-horometro').value)
   };
 
   // Validación en pantalla antes de gastar una petición al servidor.
@@ -233,7 +239,7 @@ formularioTractor.addEventListener('submit', async (evento) => {
       descripcion: tractorDescripcion.value.trim().toUpperCase(),
       centro_costo: tractorCentroCosto.value.trim().toUpperCase(),
       capacidad_galones: Number(tractorCapacidad.value || 0),
-      sin_horometro: tractorHorometro.value === 'na'
+      ...datosLectura(tractorHorometro.value)
     })
   });
 

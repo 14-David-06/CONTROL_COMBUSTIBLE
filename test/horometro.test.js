@@ -89,3 +89,14 @@ test('sin lecturas numéricas o con una sola lectura no hay horas', () => {
   assert.equal(una.horometroInicial, 900);
   assert.equal(una.horasTrabajadas, null);
 });
+
+test('kilometraje: el tope es de 1000 km por día y el resultado se lee como km y gal/km', () => {
+  const tanqueos = [t('2026-09-24', '207138', 40), t('2026-09-25', '207417', 35), t('2026-10-02', '209863', 30)];
+  const km = calcularHorometro(tanqueos, { unidad: 'km' });
+  assert.equal(km.horasTrabajadas, 2725); // 279 + 2446 km, sin ajustes
+  assert.equal(km.tramosAjustados, 0);
+  assert.equal(km.galonesPorHora, 0.024); // (35 + 30) / 2725 gal/km, con 3 decimales
+  // Leído como horómetro, los mismos números se recortan a 24 h por día.
+  const horas = calcularHorometro(tanqueos);
+  assert.equal(horas.tramosAjustados, 2);
+});

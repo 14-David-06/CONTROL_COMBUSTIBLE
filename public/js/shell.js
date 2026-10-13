@@ -28,7 +28,8 @@
       grupo: 'Operación',
       items: [
         { href: 'index', vista: 'registro', icon: '⛽', label: 'Registrar suministro' },
-        { href: 'tablas', vista: 'tablas', icon: '📋', label: 'Historial' }
+        { href: 'tablas', vista: 'tablas', icon: '📋', label: 'Historial' },
+        { href: 'tanque-movil', vista: 'tanque_movil', icon: '🛢️', label: 'Tanque móvil' }
       ]
     },
     {
