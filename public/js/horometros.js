@@ -4,8 +4,8 @@
 // Arriba los totales del periodo (máquinas, horas, galones y gal/hora de la
 // flota). Debajo, una carta por máquina (todas las que tanquearon en el rango)
 // con horas trabajadas, gal/hora, galones y su parte del consumo total.
-// "Ver detalles" despliega tanqueos, promedio, horómetro inicial y final y cada
-// tanqueo con sus datos rotulados. A la derecha, el cuadro de estados: cuenta
+// "Ver detalles" oculta las demás cartas y abre esa máquina a todo el ancho:
+// promedio, horómetro inicial y final y una TABLA con cada tanqueo. A la derecha, el cuadro de estados: cuenta
 // las máquinas de cada estado y, al tocar uno, filtra por él.
 // Los cálculos los hace el SERVIDOR (GET /api/horometros, regla de 24 h por
 // día en src/records/domain/horometro.js): aquí solo se suman, filtran y ordenan.
@@ -23,7 +23,7 @@ const textoPeriodo = document.getElementById('horometros-periodo');
 
 let maquinasPeriodo = []; // Lo que devolvió el servidor para el rango de fechas
 let maquinasVisibles = []; // Lo que se ve tras filtrar (también es lo que se exporta)
-const maquinasAbiertas = new Set(); // Cartas con "Ver detalles" desplegado
+let maquinaEnDetalle = null; // Máquina abierta con "Ver detalles" (las demás se ocultan)
 
 // Los cinco estados que se muestran. El servidor distingue "tanque" y
 // "sin-horometro", pero aquí van juntos en "na" (no aplica).
@@ -153,61 +153,40 @@ function motivoAjuste(t) {
   return '';
 }
 
-// Cada tanqueo es un bloque pequeño con todos sus datos rotulados.
-function htmlTanqueo(t, indice) {
+// Fila de la tabla de tanqueos. Si el tramo se ajustó, la fila va en rojo y
+// la columna "Nota" explica por qué.
+function filaTanqueo(t, indice) {
   const motivo = motivoAjuste(t);
   const horas = t.horasTramo === null ? (indice === 0 ? 'Primera lectura' : '—') : `${numero(t.horasTramo, 1)} h`;
+  const nota = [motivo ? `⚠ ${motivo}` : '', t.observaciones ? `💬 ${t.observaciones}` : ''].filter(Boolean);
   return `
-    <li class="tanqueo-item${motivo ? ' tanqueo-ajustado' : ''}">
-      <div class="tanqueo-cabecera"><strong>📅 ${escapeHtml(fechaCorta(t.fecha))}</strong><span>👤 ${escapeHtml(t.operario || '—')}</span></div>
-      <div class="tanqueo-datos">
-        ${dato('Horómetro', t.horometro || '—')}
-        ${dato('Galones', numero(t.cantidad))}
-        ${dato('Horas trabajadas', horas)}
-        ${dato('Gal/hora', numero(t.galonesPorHoraTramo))}
-      </div>
-      ${motivo ? `<p class="tanqueo-motivo">⚠ ${escapeHtml(motivo)}</p>` : ''}
-      ${t.observaciones ? `<p class="tanqueo-observacion">💬 ${escapeHtml(t.observaciones)}</p>` : ''}
-    </li>`;
+    <tr class="${motivo ? 'tanqueo-ajustado' : ''}">
+      <td>${escapeHtml(fechaCorta(t.fecha))}</td>
+      <td>${escapeHtml(t.operario || '—')}</td>
+      <td>${escapeHtml(t.horometro || '—')}</td>
+      <td>${escapeHtml(numero(t.cantidad))}</td>
+      <td>${escapeHtml(horas)}</td>
+      <td>${escapeHtml(numero(t.galonesPorHoraTramo))}</td>
+      <td class="tanqueo-nota">${nota.map((n) => `<span>${escapeHtml(n)}</span>`).join('') || '—'}</td>
+    </tr>`;
 }
 
 // Texto del aviso dentro de "Ver detalles" según el estado.
 function avisoEstado(m) {
   if (m.estado === 'ajustado') {
     const n = (m.tramosAjustados || 0) + (m.tramosQueRetroceden || 0);
-    return `⚠ ${n} tramo(s) ajustado(s): abajo, en rojo, está la lectura que se pasó del tope.`;
+    return `⚠ ${n} tramo(s) ajustado(s): en la tabla, en rojo, está la lectura que se pasó del tope.`;
   }
   if (m.estado === 'tanque') return 'Tanque móvil: no tiene horómetro y sus galones no suman al total (luego se reparten a la maquinaria).';
   return grupoEstado(m) === 'ok' ? '' : ESTADOS[grupoEstado(m)].descripcion;
 }
 
-function crearTarjeta(m, galonesTotales) {
+// Detalle de una máquina: datos generales, aviso del estado y la tabla de tanqueos.
+function htmlDetalle(m) {
   const grupo = grupoEstado(m);
-  const abierta = maquinasAbiertas.has(m.maquina);
-  const porcentaje = m.estado !== 'tanque' && galonesTotales > 0 ? (m.galones / galonesTotales) * 100 : null;
   const aviso = avisoEstado(m);
-  const horas = valido(m.horasTrabajadas) ? `${numero(m.horasTrabajadas, 1)} h` : '—';
-  const galh = valido(m.galonesPorHora) ? numero(m.galonesPorHora) : '—';
-
-  const tarjeta = document.createElement('article');
-  tarjeta.className = `panel carta-horometro estado-${grupo}`;
-  tarjeta.innerHTML = `
-    <div class="carta-horometro-cabecera">
-      <span class="carta-horometro-icono" aria-hidden="true">${iconoMaquina(m)}</span>
-      <div class="carta-horometro-nombre"><h3>${escapeHtml(m.maquina)}</h3><p>${escapeHtml(m.descripcion || 'Sin descripción')}</p></div>
-      <span class="etiqueta-estado estado-${grupo}">${escapeHtml(etiquetaEstado(m))}</span>
-    </div>
-    <div class="carta-horometro-metricas">
-      <div><small>Horas</small><strong>${escapeHtml(horas)}</strong></div>
-      <div class="metrica-galh"><small>Gal/hora</small><strong>${escapeHtml(galh)}</strong></div>
-      <div><small>Galones</small><strong>${escapeHtml(numero(m.galones, 1))}</strong></div>
-    </div>
-    <div class="carta-horometro-barra">
-      <div class="barra-consumo"><span></span></div>
-      <small>${porcentaje === null ? 'No suma al total' : `${numero(porcentaje, 1)} % del total`}</small>
-    </div>
-    <button type="button" class="carta-horometro-ver" aria-expanded="${abierta}"><span>👁 Ver detalles · ${m.cantidadTanqueos} tanqueo${m.cantidadTanqueos === 1 ? '' : 's'}</span><span aria-hidden="true">${abierta ? '▾' : '›'}</span></button>
-    <div class="carta-horometro-detalle" ${abierta ? '' : 'hidden'}>
+  return `
+    <div class="carta-horometro-detalle">
       <div class="grid-campos-registro">
         ${dato('Tanqueos', String(m.cantidadTanqueos))}
         ${dato('Promedio por tanqueo', `${numero(m.promedio)} gal`)}
@@ -215,20 +194,59 @@ function crearTarjeta(m, galonesTotales) {
         ${dato('Horómetro final', numero(m.horometroFinal, 1))}
       </div>
       ${aviso ? `<p class="carta-horometro-aviso estado-${grupo}">${escapeHtml(aviso)}</p>` : ''}
-      <ol class="lista-tanqueos">${m.tanqueos.map(htmlTanqueo).join('')}</ol>
+      <div class="tabla-tanqueos-scroll">
+        <table class="tabla-tanqueos">
+          <thead><tr><th>Fecha</th><th>Operario</th><th>Horómetro</th><th>Galones</th><th>Horas trabajadas</th><th>Gal/hora</th><th>Nota</th></tr></thead>
+          <tbody>${m.tanqueos.map(filaTanqueo).join('')}</tbody>
+        </table>
+      </div>
     </div>`;
+}
+
+// Carta de una máquina. Con "expandida" ocupa todo el ancho y muestra el
+// detalle; las demás cartas no se dibujan mientras tanto.
+function crearTarjeta(m, galonesTotales, expandida = false) {
+  const grupo = grupoEstado(m);
+  const porcentaje = m.estado !== 'tanque' && galonesTotales > 0 ? (m.galones / galonesTotales) * 100 : null;
+  const horas = valido(m.horasTrabajadas) ? `${numero(m.horasTrabajadas, 1)} h` : '—';
+  const galh = valido(m.galonesPorHora) ? numero(m.galonesPorHora) : '—';
+  const textoBoton = expandida
+    ? '<span>← Volver a todas las máquinas</span><span aria-hidden="true">✕</span>'
+    : `<span>👁 Ver detalles · ${m.cantidadTanqueos} tanqueo${m.cantidadTanqueos === 1 ? '' : 's'}</span><span aria-hidden="true">›</span>`;
+
+  const tarjeta = document.createElement('article');
+  tarjeta.className = `panel carta-horometro estado-${grupo}${expandida ? ' carta-expandida' : ''}`;
+  tarjeta.dataset.maquina = m.maquina;
+  tarjeta.innerHTML = `
+    <div class="carta-horometro-cabecera">
+      <span class="carta-horometro-icono" aria-hidden="true">${iconoMaquina(m)}</span>
+      <div class="carta-horometro-nombre"><h3>${escapeHtml(m.maquina)}</h3><p>${escapeHtml(m.descripcion || 'Sin descripción')}</p></div>
+      <span class="etiqueta-estado estado-${grupo}">${escapeHtml(etiquetaEstado(m))}</span>
+    </div>
+    <div class="carta-horometro-resumen">
+      <div class="carta-horometro-metricas">
+        <div><small>Horas</small><strong>${escapeHtml(horas)}</strong></div>
+        <div class="metrica-galh"><small>Gal/hora</small><strong>${escapeHtml(galh)}</strong></div>
+        <div><small>Galones</small><strong>${escapeHtml(numero(m.galones, 1))}</strong></div>
+      </div>
+      <div class="carta-horometro-barra">
+        <div class="barra-consumo"><span></span></div>
+        <small>${porcentaje === null ? 'No suma al total' : `${numero(porcentaje, 1)} % del total`}</small>
+      </div>
+    </div>
+    ${expandida ? htmlDetalle(m) : ''}
+    <button type="button" class="carta-horometro-ver" aria-expanded="${expandida}">${textoBoton}</button>`;
 
   // El ancho de la barra se pone por JS (los estilos en línea los bloquea la CSP).
   tarjeta.querySelector('.barra-consumo span').style.width = `${Math.min(100, porcentaje || 0)}%`;
-
-  const boton = tarjeta.querySelector('.carta-horometro-ver');
-  const detalle = tarjeta.querySelector('.carta-horometro-detalle');
-  boton.addEventListener('click', () => {
-    detalle.hidden = !detalle.hidden;
-    if (detalle.hidden) maquinasAbiertas.delete(m.maquina);
-    else maquinasAbiertas.add(m.maquina);
-    boton.setAttribute('aria-expanded', String(!detalle.hidden));
-    boton.lastElementChild.textContent = detalle.hidden ? '›' : '▾';
+  tarjeta.querySelector('.carta-horometro-ver').addEventListener('click', () => {
+    maquinaEnDetalle = expandida ? null : m.maquina;
+    pintar();
+    // Al abrir se sube al detalle; al volver, a la carta de esa misma máquina.
+    const destino = expandida
+      ? contenedorTarjetas.querySelector(`[data-maquina="${CSS.escape(m.maquina)}"]`)
+      : contenedorTarjetas;
+    destino?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   return tarjeta;
 }
@@ -237,8 +255,12 @@ function pintar() {
   maquinasVisibles = filtrarYOrdenar();
   const galonesTotales = pintarTotales(maquinasVisibles);
   pintarEstados();
+  // Si la máquina abierta ya no pasa los filtros, se vuelve a la lista completa.
+  const enDetalle = maquinasVisibles.find((m) => m.maquina === maquinaEnDetalle);
+  if (!enDetalle) maquinaEnDetalle = null;
   contenedorTarjetas.innerHTML = '';
-  maquinasVisibles.forEach((m) => contenedorTarjetas.appendChild(crearTarjeta(m, galonesTotales)));
+  if (enDetalle) contenedorTarjetas.appendChild(crearTarjeta(enDetalle, galonesTotales, true));
+  else maquinasVisibles.forEach((m) => contenedorTarjetas.appendChild(crearTarjeta(m, galonesTotales)));
   mensajeVacio.hidden = maquinasVisibles.length > 0;
 }
 

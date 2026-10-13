@@ -388,16 +388,20 @@ label { color:var(--cc-texto);font-weight:700 }
 .nota-horometros ul { margin:0;padding-left:18px;display:grid;gap:6px;color:var(--cc-muted);font-size:.8rem;line-height:1.4 }
 .nota-horometros strong { color:var(--cc-texto) }
 
-/* Detalle de cada tanqueo (dentro de "Ver detalles") */
-.lista-tanqueos { list-style:none;margin:0;padding:0;display:grid;gap:10px }
-.tanqueo-item { border:1px solid var(--cc-borde);border-radius:12px;padding:10px 12px;background:#f7faf7 }
-.tanqueo-item.tanqueo-ajustado { background:var(--cc-rojo-suave);border-color:#f0c5c1 }
-.tanqueo-cabecera { display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:.85rem;color:var(--cc-muted) }
-.tanqueo-cabecera strong { color:var(--cc-texto) }
-.tanqueo-datos { display:grid;grid-template-columns:1fr 1fr;gap:8px }
-.tanqueo-datos .campo-registro-tarjeta strong { padding:6px 8px;font-size:.85rem;background:#ffffff }
-.tanqueo-motivo { margin:8px 0 0;color:#9d3027;font-size:.8rem;font-weight:700 }
-.tanqueo-observacion { margin:6px 0 0;color:var(--cc-muted);font-size:.8rem }
+/* "Ver detalles": la carta elegida ocupa todo el ancho (las demás se ocultan)
+   y los tanqueos van en una tabla. El botón "Volver" sube arriba (order:-1). */
+.carta-horometro-resumen { display:grid;gap:12px }
+.carta-expandida { grid-column:1 / -1 }
+.carta-expandida .carta-horometro-resumen { grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:center }
+.carta-expandida .carta-horometro-ver { order:-1;margin-top:0;justify-content:space-between }
+.carta-expandida .carta-horometro-detalle .grid-campos-registro { grid-template-columns:repeat(4,minmax(0,1fr)) }
+.tabla-tanqueos-scroll { overflow-x:auto;border:1px solid var(--cc-borde);border-radius:12px }
+.tabla-tanqueos { min-width:760px!important;border-radius:0!important }
+.tabla-tanqueos th,.tabla-tanqueos td { text-align:left;vertical-align:top;white-space:nowrap }
+.tabla-tanqueos td.tanqueo-nota { white-space:normal;min-width:240px }
+.tabla-tanqueos tr.tanqueo-ajustado td { background:var(--cc-rojo-suave) }
+.tanqueo-nota span { display:block;font-size:.78rem;color:var(--cc-muted) }
+.tanqueo-ajustado .tanqueo-nota span:first-child { color:#9d3027;font-weight:700 }
 
 @media(max-width:1200px) { .controles-horometros-filtros { grid-template-columns:repeat(3,minmax(0,1fr)) } }
 @media(max-width:1100px) {
@@ -413,6 +417,8 @@ label { color:var(--cc-texto);font-weight:700 }
   .kpi-horometro > span { width:36px;height:36px;font-size:1.05rem }
   .kpi-horometro strong { font-size:1.15rem }
   .estado-fila small { display:none } /* En celular la lista de estados va compacta */
+  .carta-expandida .carta-horometro-resumen { grid-template-columns:1fr }
+  .carta-expandida .carta-horometro-detalle .grid-campos-registro { grid-template-columns:1fr 1fr }
   .controles-horometros-titulo .botones-tabla > * { flex:1;white-space:nowrap;font-size:.85rem;padding:0 8px }
 }
 /* Impresión: solo totales y cartas, sin menú ni filtros */
