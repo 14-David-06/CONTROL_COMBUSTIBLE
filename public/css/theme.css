@@ -277,7 +277,9 @@ label { color:var(--cc-texto);font-weight:700 }
 .pagina-login { min-height:100vh;background:radial-gradient(circle at 15% 15%,rgba(245,165,36,.10),transparent 32%),radial-gradient(circle at 90% 85%,rgba(62,207,142,.08),transparent 28%),var(--cc-fondo)!important } /* Dos halos de color sobre el fondo */
 .tarjeta-login { border-top:5px solid var(--cc-acento)!important;max-width:470px!important;padding:30px!important }
 .marca-login { display:flex!important;align-items:center!important;gap:14px!important;margin-bottom:22px!important }
-.marca-login img { width:62px!important;height:62px!important;object-fit:cover!important;border-radius:15px!important;border:1px solid #cfe0d4!important }
+/* El logo es ancho (texto GUAICARAMO): se muestra completo, sin recortar */
+.marca-login img { width:150px!important;height:62px!important;object-fit:contain!important;padding:6px 8px!important;background:#fff!important;border-radius:15px!important;border:1px solid #cfe0d4!important }
+@media(max-width:420px) { .marca-login { flex-direction:column!important;align-items:flex-start!important } .marca-login img { width:170px!important } }
 .marca-login h1 { color:var(--cc-texto)!important;font-size:1.45rem!important;line-height:1.15!important }
 .tarjeta-login form button { background:var(--cc-acento)!important;color:var(--cc-acento-ink)!important;border-color:var(--cc-acento)!important;box-shadow:0 8px 20px rgba(245,165,36,.22)!important }
 .tarjeta-login form button:hover { background:var(--cc-acento-hover)!important;border-color:var(--cc-acento-hover)!important }
