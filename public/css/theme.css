@@ -724,3 +724,48 @@ body.us-panel-abierto { overflow:hidden }
   .rp-total-semana { display:none }
   .vista-reportes .grid-analitica-maquinas { grid-template-columns:1fr }
 }
+
+/* ===== Inicio (menu.html / menu.js) ===== */
+/* Línea de estado al pie de cada indicador */
+.dashboard-inicio .resumen-dashboard-card { flex-wrap:wrap;align-content:flex-start }
+.dashboard-inicio .resumen-dashboard-card > div { flex:1 1 0;min-width:0 }
+.dashboard-inicio .resumen-dashboard-card label { overflow-wrap:anywhere }
+.kpi-estado { display:flex;align-items:center;gap:7px;flex-basis:100%;margin:2px 0 0;padding-top:10px;border-top:1px solid var(--cc-borde);color:var(--cc-muted);font-size:.74rem;font-weight:600 }
+.kpi-estado::before { content:'';flex:0 0 7px;height:7px;border-radius:50%;background:currentColor }
+.kpi-estado.kpi-ok { color:var(--cc-verde) }
+.kpi-estado.kpi-atencion { color:var(--cc-rojo) }
+/* Ranking y gráfica de 7 días lado a lado */
+.dashboard-inicio .grid-inicio-dos { grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:stretch }
+.dashboard-inicio .tarjeta-consumo-maquinas { margin:0 }
+.dashboard-inicio .tarjeta-consumo-semana { padding-bottom:34px }
+.dashboard-inicio .tarjeta-consumo-semana .rp-riel { height:150px }
+.dashboard-inicio .grafica-vacia { margin-top:30px;text-align:center }
+/* Alertas recientes: tarjetas en fila */
+.cabecera-alertas-recientes { display:flex;justify-content:space-between;align-items:flex-start;gap:12px }
+.cabecera-alertas-recientes .ver-todas-alertas { margin:0;padding:2px 0 0;color:var(--cc-acento);white-space:nowrap }
+.lista-alertas-recientes { display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:14px }
+.lista-alertas-recientes .alerta-reciente-item { display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--cc-borde);border-radius:12px;background:var(--cc-superficie);color:inherit;text-decoration:none;transition:border-color .15s ease }
+.lista-alertas-recientes .alerta-reciente-item:last-child { border-bottom:1px solid var(--cc-borde) }
+.lista-alertas-recientes .alerta-reciente-item:hover { border-color:var(--cc-acento) }
+.lista-alertas-recientes .alerta-reciente-icono { display:grid;place-items:center;flex:0 0 40px;height:40px;border-radius:50%;background:var(--cc-amarillo-suave);font-size:1.15rem;line-height:1 }
+.tipo-sobrecapacidad .alerta-reciente-icono,.tipo-cierre_pendiente .alerta-reciente-icono { background:var(--cc-rojo-suave) }
+.tipo-promedio .alerta-reciente-icono { background:var(--cc-naranja-suave) }
+.tipo-inspeccion_pendiente .alerta-reciente-icono { background:var(--cc-morado-suave) }
+.lista-alertas-recientes .alerta-reciente-item > div { min-width:0 }
+.lista-alertas-recientes .alerta-reciente-item strong { overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.lista-alertas-recientes .alerta-reciente-item small { display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--cc-muted);font-size:.7rem }
+.lista-alertas-recientes .alerta-reciente-item small i { width:7px;height:7px;margin:0;border-radius:50%;background:var(--cc-amarillo) }
+.lista-alertas-recientes .tipo-sobrecapacidad small i,.lista-alertas-recientes .tipo-cierre_pendiente small i { background:var(--cc-rojo) }
+.lista-alertas-recientes .tipo-promedio small i { background:var(--cc-acento) }
+.lista-alertas-recientes .tipo-inspeccion_pendiente small i { background:var(--cc-morado) }
+@media(max-width:1100px) {
+  .dashboard-inicio .grid-inicio-dos { grid-template-columns:1fr }
+}
+@media(max-width:600px) {
+  .dashboard-inicio .resumen-dashboard { grid-template-columns:repeat(2,minmax(0,1fr)) }
+  .dashboard-inicio .resumen-dashboard-card { gap:10px }
+  .dashboard-inicio .resumen-dashboard-card > span { width:36px;height:36px;font-size:17px }
+  .kpi-estado { font-size:.68rem }
+  .dashboard-inicio .tarjeta-consumo-semana .rp-riel { height:120px }
+  .lista-alertas-recientes { grid-template-columns:1fr }
+}

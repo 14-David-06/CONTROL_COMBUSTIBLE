@@ -4,8 +4,8 @@
 // Pinta la pantalla de bienvenida con:
 //   * saludo personalizado según el rol,
 //   * tarjetas de indicadores (galones de hoy, registros, alertas, máquinas),
-//   * gráfica de consumo de los últimos 7 días (SVG dibujado a mano),
-//   * ranking de máquinas del mes y lista de alertas recientes.
+//   * gráfica de barras del consumo de los últimos 7 días,
+//   * ranking de máquinas del mes y tarjetas de alertas recientes.
 // Todo se calcula en el navegador a partir de /api/registros y /api/alertas.
 // Los datos se refrescan solos: alertas cada 15 s y resumen cada 30 s.
 // ============================================================================
@@ -40,12 +40,12 @@ if (sesionActual) {
   );
 }
 
-// Color del punto según el tipo de alerta.
+// Ícono de cada tipo de alerta (el color del círculo lo pone theme.css).
 const ICONOS_ALERTA = {
-  sobrecapacidad: '🔴',
-  promedio: '🟠',
-  horometro_irregular: '🟡',
-  inspeccion_pendiente: '🟣',
+  sobrecapacidad: '⛽',
+  promedio: '📈',
+  horometro_irregular: '⏱️',
+  inspeccion_pendiente: '📋',
   cierre_pendiente: '⏰'
 };
 
@@ -65,8 +65,36 @@ function descripcionAlerta(tipo) {
   }
 }
 
+// Escribe la línea de estado que va al pie de cada tarjeta de indicadores.
+// tono: '' (gris), 'ok' (verde) o 'atencion' (rojo).
+function ponerEstadoKpi(id, texto, tono = '') {
+  const destino = document.getElementById(id);
+  if (!destino) return;
+  destino.textContent = texto;
+  destino.className = `kpi-estado${tono ? ` kpi-${tono}` : ''}`;
+}
+
+// Hora de una marca de tiempo en formato corto: "08:24 a. m.".
+const formatoHora = (fecha) => fecha.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+// "Hoy, 08:24 a. m.", "Ayer, 05:36 p. m." o "02/10, 09:10 a. m.".
+function cuandoFue(marca) {
+  const fecha = new Date(marca);
+  if (!marca || Number.isNaN(fecha.getTime())) return '';
+  const ayer = new Date();
+  ayer.setDate(ayer.getDate() - 1);
+  const dia = fechaLocalISO(fecha);
+  const etiqueta =
+    dia === fechaLocalISO()
+      ? 'Hoy'
+      : dia === fechaLocalISO(ayer)
+        ? 'Ayer'
+        : `${dia.slice(8, 10)}/${dia.slice(5, 7)}`;
+  return `${etiqueta}, ${formatoHora(fecha)}`;
+}
+
 // Reutiliza el mismo listado de /api/alertas para el contador del panel de
-// KPIs y para la mini-lista "Alertas recientes" del inicio.
+// KPIs y para las tarjetas "Alertas recientes" del inicio.
 async function cargarAlertasRecientes() {
   const tarjeta = document.getElementById('tarjeta-alertas-recientes');
   // Si el usuario no tiene permiso sobre alertas, la tarjeta entera se oculta.
@@ -83,20 +111,28 @@ async function cargarAlertasRecientes() {
 
     // Contador del indicador "Alertas".
     document.getElementById('dashboard-alertas')?.replaceChildren(document.createTextNode(String(pendientes.length)));
+    ponerEstadoKpi(
+      'estado-alertas',
+      pendientes.length ? 'Requieren revisión' : 'Sin alertas pendientes',
+      pendientes.length ? 'atencion' : 'ok'
+    );
 
-    // Lista con las 3 alertas pendientes más recientes.
+    // Tarjetas con las 4 alertas pendientes más recientes.
     const lista = document.getElementById('lista-alertas-recientes');
     if (lista) {
       lista.innerHTML = '';
-      pendientes.slice(0, 3).forEach((alerta) => {
+      pendientes.slice(0, 4).forEach((alerta) => {
         const tipo = alerta.tipo_alerta || 'sobrecapacidad';
-        const item = document.createElement('div');
+        const cuando = cuandoFue(alerta.creado_en || alerta.fecha);
+        const item = document.createElement('a');
         item.className = `alerta-reciente-item tipo-${tipo}`; // La clase define el color
+        item.href = 'alertas';
         item.innerHTML = `
-          <i></i>
+          <span class="alerta-reciente-icono">${ICONOS_ALERTA[tipo] || '🔔'}</span>
           <div>
             <strong>${escapeHtml(alerta.maquina || 'Máquina')}</strong>
-            <span>${ICONOS_ALERTA[tipo] || '🔔'} ${escapeHtml(descripcionAlerta(tipo))}</span>
+            <span>${escapeHtml(descripcionAlerta(tipo))}</span>
+            ${cuando ? `<small><i></i>${escapeHtml(cuando)}</small>` : ''}
           </div>
         `;
         lista.appendChild(item);
@@ -127,6 +163,18 @@ async function cargarResumen() {
       .getElementById('dashboard-galones')
       ?.replaceChildren(document.createTextNode(`${galonesHoy.toFixed(2)} GAL`));
     document.getElementById('dashboard-registros')?.replaceChildren(document.createTextNode(String(delDia.length)));
+
+    // Líneas de estado de las dos primeras tarjetas.
+    ponerEstadoKpi('estado-galones', galonesHoy > 0 ? 'Hay movimiento hoy' : 'Sin movimiento hoy', galonesHoy > 0 ? 'ok' : '');
+    const ultimo = delDia
+      .map((r) => new Date(r.registradoEn))
+      .filter((fecha) => !Number.isNaN(fecha.getTime()))
+      .sort((a, b) => b - a)[0];
+    ponerEstadoKpi(
+      'estado-registros',
+      delDia.length ? (ultimo ? `Último a las ${formatoHora(ultimo)}` : 'Registros del día') : 'Sin registros hoy',
+      delDia.length ? 'ok' : ''
+    );
 
     // Con la misma descarga se alimentan las dos visualizaciones.
     dibujarConsumoSemana(registros);
@@ -184,12 +232,14 @@ function dibujarConsumoPorMaquina(registros) {
     .join('');
 }
 
-// Grafica de area con los galones despachados en los ultimos 7 dias,
-// calculada con los mismos registros que ya se cargan para el resumen.
-// Se dibuja como SVG a mano, sin librerías externas.
+// Gráfica de barras con los galones despachados en cada uno de los últimos
+// 7 días, calculada con los mismos registros que ya se cargan para el resumen.
+// Usa las mismas clases rp- que la gráfica de Reportes (theme.css).
+const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 function dibujarConsumoSemana(registros) {
   const grafica = document.getElementById('grafica-consumo-semana');
   const vacio = document.getElementById('grafica-consumo-vacia');
+  const totalTexto = document.getElementById('total-semana-inicio');
   if (!grafica) return;
 
   // Lista de los últimos 7 días, del más antiguo al de hoy.
@@ -197,47 +247,38 @@ function dibujarConsumoSemana(registros) {
   for (let i = 6; i >= 0; i--) {
     const fecha = new Date();
     fecha.setDate(fecha.getDate() - i);
-    dias.push(fechaLocalISO(fecha));
+    dias.push(fecha);
   }
 
   // Total de galones de cada uno de esos días.
   const totalesPorDia = dias.map((fecha) =>
     registros
-      .filter((r) => String(r.fecha || '').slice(0, 10) === fecha && !Number(r.cierreDia))
+      .filter((r) => String(r.fecha || '').slice(0, 10) === fechaLocalISO(fecha) && !Number(r.cierreDia))
       .reduce((total, r) => total + Number(r.cantidad || 0), 0)
   );
   const totalSemana = totalesPorDia.reduce((a, b) => a + b, 0);
 
-  // Sin movimiento en la semana se oculta la gráfica y se muestra el aviso.
-  if (totalSemana <= 0) {
-    grafica.hidden = true;
-    if (vacio) vacio.hidden = false;
-    return;
-  }
-  grafica.hidden = false;
-  if (vacio) vacio.hidden = true;
+  // Sin movimiento en la semana se dejan los días vacíos y se muestra el aviso.
+  if (vacio) vacio.hidden = totalSemana > 0;
+  if (totalTexto) totalTexto.textContent = totalSemana > 0 ? `${Math.round(totalSemana).toLocaleString('es-CO')} gal en la semana` : '';
 
-  // Cálculo de coordenadas del SVG.
-  const ancho = 400; // Ancho del lienzo
-  const alto = 150; // Alto del lienzo
-  const maximo = Math.max(...totalesPorDia, 1); // El día más alto toca el techo
-  const paso = ancho / (totalesPorDia.length - 1); // Separación horizontal entre puntos
-  const puntos = totalesPorDia.map((valor, indice) => {
-    const x = indice * paso;
-    // En SVG el eje Y crece hacia abajo: por eso se resta. El -10/-20 deja
-    // un margen para que la línea no quede pegada a los bordes.
-    const y = alto - (valor / maximo) * (alto - 20) - 10;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  const linea = puntos.join(' ');
-  // El relleno cierra la figura bajando a la base en ambos extremos.
-  const relleno = `0,${alto} ${linea} ${ancho},${alto}`;
-
-  // polygon = área naranja translúcida; polyline = la línea superior.
-  grafica.innerHTML = `
-    <polygon points="${relleno}" fill="#f5a524" opacity=".14"></polygon>
-    <polyline points="${linea}" fill="none" stroke="#f5a524" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>
-  `;
+  // Una columna por día: valor encima, barra con altura proporcional y el día abajo.
+  const maximo = Math.max(...totalesPorDia, 1); // El mayor llega arriba
+  grafica.innerHTML = totalesPorDia
+    .map((valor, i) => {
+      const dia = `${DIAS_CORTOS[dias[i].getDay()]} ${String(dias[i].getDate()).padStart(2, '0')}`;
+      const esHoy = i === 6;
+      return `
+        <div class="rp-columna${esHoy ? ' rp-hoy' : ''}" title="${dia}: ${valor.toFixed(1)} gal">
+          <span class="rp-riel">
+            <span class="rp-barra" style="height:${Math.max(valor > 0 ? 3 : 0, (valor / maximo) * 100)}%">
+              ${valor > 0 ? `<b class="rp-valor">${Math.round(valor).toLocaleString('es-CO')}</b>` : ''}
+            </span>
+          </span>
+          <span class="rp-dia">${esHoy ? 'Hoy' : dia}</span>
+        </div>`;
+    })
+    .join('');
 }
 
 // Indicador con el total de máquinas activas del catálogo.

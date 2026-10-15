@@ -10,7 +10,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/styles.css">
-  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/theme.css?v=20261015-4">
   <title>Inicio | Control de Combustible</title>
   <!-- App instalable (PWA): manifiesto, color de la barra y íconos -->
   <link rel="manifest" href="/manifest.webmanifest">
@@ -47,38 +47,46 @@
 
     <!-- INDICADORES (KPI): los cuatro valores se actualizan desde menu.js -->
     <section class="panel resumen-dashboard" id="resumen-dashboard">
-      <div class="resumen-dashboard-card"><span>⛽</span><div><small>Hoy</small><strong id="dashboard-galones">0.00 GAL</strong><label>Combustible registrado</label></div></div>
-      <div class="resumen-dashboard-card"><span>📝</span><div><small>Hoy</small><strong id="dashboard-registros">0</strong><label>Registros</label></div></div>
-      <div class="resumen-dashboard-card"><span>🚜</span><div><small>Total</small><strong id="dashboard-maquinas">—</strong><label>Máquinas registradas</label></div></div>
-      <div class="resumen-dashboard-card card-alertas"><span>🔔</span><div><small>Atención</small><strong id="dashboard-alertas">0</strong><label>Alertas pendientes</label></div></div>
+      <!-- Cada tarjeta tiene abajo una línea de estado (.kpi-estado) que menu.js
+           cambia según el dato: neutra, .kpi-ok (verde) o .kpi-atencion (rojo). -->
+      <div class="resumen-dashboard-card"><span>⛽</span><div><small>Hoy</small><strong id="dashboard-galones">0.00 GAL</strong><label>Combustible registrado</label></div><p class="kpi-estado" id="estado-galones">Sin movimiento hoy</p></div>
+      <div class="resumen-dashboard-card"><span>📝</span><div><small>Hoy</small><strong id="dashboard-registros">0</strong><label>Registros</label></div><p class="kpi-estado" id="estado-registros">Sin registros hoy</p></div>
+      <div class="resumen-dashboard-card"><span>🚜</span><div><small>Total</small><strong id="dashboard-maquinas">—</strong><label>Máquinas registradas</label></div><p class="kpi-estado kpi-ok">Activas en el sistema</p></div>
+      <div class="resumen-dashboard-card card-alertas"><span>🔔</span><div><small>Atención</small><strong id="dashboard-alertas">0</strong><label>Alertas pendientes</label></div><p class="kpi-estado" id="estado-alertas">Sin alertas pendientes</p></div>
     </section>
 
-    <!-- RANKING DE MÁQUINAS DEL MES: las barras las genera menu.js -->
-    <section class="panel tarjeta-consumo-maquinas" id="tarjeta-consumo-maquinas">
-      <h2>Consumo por máquina</h2>
-      <p class="texto-secundario">Top de máquinas por galones despachados este mes</p>
-      <div class="ranking-consumo-maquinas" id="ranking-consumo-maquinas"></div>
-      <p class="ranking-consumo-vacio" id="ranking-consumo-vacio" hidden>Aún no hay registros este mes.</p>
-    </section>
-
-    <!-- DOS TARJETAS LADO A LADO: gráfica semanal y alertas recientes -->
+    <!-- DOS TARJETAS LADO A LADO: ranking del mes y gráfica de 7 días -->
     <div class="grid-inicio-dos">
-      <section class="panel tarjeta-consumo-semana">
-        <h2>Consumo · últimos 7 días</h2>
-        <p class="texto-secundario">Galones despachados por día</p>
-        <!-- SVG vacío: menu.js dibuja dentro la línea y el área del consumo.
-             El viewBox 0 0 400 150 define el sistema de coordenadas que usa. -->
-        <svg class="grafica-svg" id="grafica-consumo-semana" viewBox="0 0 400 150" preserveAspectRatio="none" aria-hidden="true"></svg>
-        <p class="grafica-vacia" id="grafica-consumo-vacia" hidden>Aún no hay suficientes registros esta semana.</p>
+      <!-- RANKING DE MÁQUINAS DEL MES: las barras las genera menu.js -->
+      <section class="panel tarjeta-consumo-maquinas" id="tarjeta-consumo-maquinas">
+        <h2>Consumo por máquina</h2>
+        <p class="texto-secundario">Top de máquinas por galones despachados este mes</p>
+        <div class="ranking-consumo-maquinas" id="ranking-consumo-maquinas"></div>
+        <p class="ranking-consumo-vacio" id="ranking-consumo-vacio" hidden>Aún no hay registros este mes.</p>
       </section>
-      <section class="panel tarjeta-alertas-recientes" id="tarjeta-alertas-recientes">
-        <h2>Alertas recientes</h2>
-        <p class="texto-secundario">Requieren revisión</p>
-        <div id="lista-alertas-recientes"></div> <!-- Las 3 alertas más recientes -->
-        <p class="alertas-recientes-vacio" id="alertas-recientes-vacio" hidden>No hay alertas pendientes.</p>
-        <a class="ver-todas-alertas" href="alertas" data-vista="alertas">Ver todas las alertas →</a>
+      <!-- Barras de los últimos 7 días: usa las mismas clases rp- de Reportes (theme.css) -->
+      <section class="panel tarjeta-consumo-semana">
+        <div class="rp-titulo">
+          <div>
+            <h2>Consumo · últimos 7 días</h2>
+            <p class="texto-secundario">Galones despachados por día</p>
+          </div>
+          <strong class="rp-total-semana" id="total-semana-inicio"></strong>
+        </div>
+        <div class="rp-barras" id="grafica-consumo-semana" role="img" aria-label="Galones por día de los últimos 7 días"></div>
+        <p class="grafica-vacia" id="grafica-consumo-vacia" hidden>Aún no hay registros en los últimos 7 días.</p>
       </section>
     </div>
+
+    <!-- ALERTAS RECIENTES: tarjetas en fila con la hora de cada alerta -->
+    <section class="panel tarjeta-alertas-recientes" id="tarjeta-alertas-recientes">
+      <div class="cabecera-alertas-recientes">
+        <div><h2>Alertas recientes</h2><p class="texto-secundario">Requieren revisión</p></div>
+        <a class="ver-todas-alertas" href="alertas" data-vista="alertas">Ver todas las alertas →</a>
+      </div>
+      <div class="lista-alertas-recientes" id="lista-alertas-recientes"></div> <!-- Las 4 alertas más recientes -->
+      <p class="alertas-recientes-vacio" id="alertas-recientes-vacio" hidden>No hay alertas pendientes.</p>
+    </section>
 
     <!-- BLOQUE DESACTIVADO: antiguos accesos rápidos. Se dejó comentado porque
          la navegación ahora la construye shell.js (menú lateral y barra inferior).
@@ -105,6 +113,6 @@
   <script src="../js/shell.js"></script>
   <!-- protegerMenuPrincipal: basta con tener sesión (no exige un permiso concreto) -->
   <script>if (protegerMenuPrincipal()) aplicarPermisosEnlaces();</script>
-  <script src="../js/menu.js"></script>
+  <script src="../js/menu.js?v=20261015-1"></script>
 </body>
 </html>
