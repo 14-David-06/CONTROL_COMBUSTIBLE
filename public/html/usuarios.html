@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <!-- ==========================================================================
      usuarios.html — ADMINISTRACIÓN DE USUARIOS Y PERMISOS
-     Tres secciones: mapa de permisos por rol (solo consulta), formulario de
-     creación y tabla de usuarios existentes con edición en línea.
+     Resumen en cuadros, buscador con filtros, lista de usuarios y la guía de
+     "Roles del sistema". Crear y editar se hace en un panel lateral donde el
+     rol enciende sus permisos y se pueden sumar permisos extra.
      Lógica en ../js/usuarios.js. Requiere el permiso 'usuarios'.
      ========================================================================== -->
 <html lang="es">
@@ -10,7 +11,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/styles.css">
-  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/theme.css?v=20261015-2">
   <title>Registro de usuarios</title>
   <!-- App instalable (PWA): manifiesto, color de la barra y íconos -->
   <link rel="manifest" href="/manifest.webmanifest">
@@ -23,7 +24,7 @@
   <script src="/js/pwa.js" defer></script>
 </head>
 <body>
-  <main class="pantalla">
+  <main class="pantalla vista-usuarios">
     <!-- Encabezado de la vista administrativa de usuarios -->
     <header class="encabezado encabezado-compacto">
       <div class="encabezado-control">
@@ -39,86 +40,122 @@
       </button>
     </header>
 
-    <!-- Referencia visual: que puede hacer cada rol, en forma de arbol -->
-    <!-- El árbol lo genera usuarios.js desde la constante GRUPOS_PERMISOS -->
-    <section class="panel panel-mapa-permisos">
-      <div class="titulo-tabla">
-        <h2>Mapa de permisos por rol</h2>
-      </div>
-      <p class="texto-secundario">
-        Guia rapida de que incluye cada rol. Al crear o editar un usuario puedes ajustar sus
-        permisos individualmente.
-      </p>
-      <div class="arbol-roles" id="mapa-permisos-roles" aria-hidden="true"></div>
+    <!-- Aviso de quién puede hacer qué -->
+    <section class="us-aviso">
+      <span class="us-aviso-icono" aria-hidden="true">🛡️</span>
+      <p><strong>Gestiona las cuentas del sistema y lo que puede ver cada una.</strong>
+        El rol enciende sus permisos de entrada; puedes sumar permisos extra a una persona.
+        Solo un super administrador puede crear o modificar otro super administrador.</p>
     </section>
 
-    <!-- Formulario para crear usuarios nuevos en usuarios_combustible -->
-    <section class="panel">
-      <form id="formulario-usuario" class="formulario-usuario" autocomplete="off">
-        <div>
-          <label for="usuario-nuevo">Usuario</label>
-          <!-- Mínimo 3 caracteres (lo valida el servidor); se guarda en minúsculas -->
-          <input type="text" id="usuario-nuevo" autocomplete="off" required>
+    <!-- Buscador, filtros y botón de crear -->
+    <section class="panel us-barra">
+      <div class="us-buscar">
+        <label for="us-buscar" class="sr-only">Buscar usuario</label>
+        <input type="search" id="us-buscar" placeholder="🔍 Buscar por usuario o rol…" autocomplete="off">
+      </div>
+      <div>
+        <label for="us-filtro-rol" class="sr-only">Rol</label>
+        <select id="us-filtro-rol">
+          <option value="">Todos los roles</option>
+          <option value="super_administrador">Super administrador</option>
+          <option value="administrador">Administrador</option>
+          <option value="supervisor">Supervisor</option>
+          <option value="operario">Operario</option>
+        </select>
+      </div>
+      <div>
+        <label for="us-filtro-estado" class="sr-only">Estado</label>
+        <select id="us-filtro-estado">
+          <option value="">Todos los estados</option>
+          <option value="activo">Activos</option>
+          <option value="pendiente">Deben cambiar contraseña</option>
+          <option value="extra">Con permisos extra</option>
+        </select>
+      </div>
+      <button type="button" class="us-boton-nuevo" id="us-nuevo">+ Nuevo usuario</button>
+    </section>
+
+    <!-- Cuadros de resumen (los llena usuarios.js) -->
+    <section class="us-kpis">
+      <div class="us-kpi"><span aria-hidden="true">👥</span><div><small>Total de usuarios</small><strong id="us-kpi-total">0</strong><em>cuentas registradas</em></div></div>
+      <div class="us-kpi us-kpi-activos"><span aria-hidden="true">✅</span><div><small>Activos</small><strong id="us-kpi-activos">0</strong><em>ya tienen su propia contraseña</em></div></div>
+      <div class="us-kpi us-kpi-pendientes"><span aria-hidden="true">🔑</span><div><small>Deben cambiar contraseña</small><strong id="us-kpi-pendientes">0</strong><em>aún con la clave inicial</em></div></div>
+      <div class="us-kpi us-kpi-extra"><span aria-hidden="true">➕</span><div><small>Con permisos extra</small><strong id="us-kpi-extra">0</strong><em>más de lo que trae su rol</em></div></div>
+    </section>
+
+    <div class="us-contenido">
+      <!-- Lista de usuarios -->
+      <section class="panel us-lista">
+        <div class="us-lista-titulo">
+          <h2>Lista de usuarios</h2>
+          <span class="us-contador" id="us-contador">0 usuarios</span>
+        </div>
+        <div class="us-tabla-scroll">
+          <table class="us-tabla">
+            <thead>
+              <tr><th>Usuario</th><th>Rol</th><th>Permisos</th><th>Estado</th><th>Creado</th><th><span class="sr-only">Acciones</span></th></tr>
+            </thead>
+            <!-- Las filas las genera usuarios.js -->
+            <tbody id="us-filas"></tbody>
+          </table>
+        </div>
+        <p class="tabla-vacia" id="us-vacio" hidden>No hay usuarios que coincidan con la búsqueda.</p>
+      </section>
+
+      <!-- Guía: qué permisos trae cada rol (la arma usuarios.js desde ROLES) -->
+      <aside class="panel us-roles">
+        <h2>Roles del sistema</h2>
+        <p class="us-roles-nota">Lo que trae cada rol de entrada. A cada persona se le pueden sumar permisos extra.</p>
+        <div id="us-roles-lista"></div>
+      </aside>
+    </div>
+  </main>
+
+  <!-- PANEL LATERAL: crear o editar un usuario -->
+  <div class="us-fondo" id="us-fondo" hidden></div>
+  <aside class="us-panel" id="us-panel" role="dialog" aria-modal="true" aria-labelledby="us-panel-titulo" hidden>
+    <form id="us-formulario" autocomplete="off">
+      <header class="us-panel-cabecera">
+        <h2 id="us-panel-titulo">Nuevo usuario</h2>
+        <button type="button" class="us-cerrar" id="us-cerrar" aria-label="Cerrar">✕</button>
+      </header>
+
+      <div class="us-panel-cuerpo">
+        <div class="us-campo">
+          <label for="us-usuario">Usuario</label>
+          <!-- Mínimo 3 caracteres (lo valida el servidor); no se cambia al editar -->
+          <input type="text" id="us-usuario" maxlength="60" autocomplete="off" required>
         </div>
 
-        <div>
-          <label for="contrasena-nueva">Contrasena</label>
-          <!-- Viene con 123456 por defecto: al entrar con ella, el sistema
-               obliga al usuario a cambiarla en cambiar-contrasena.html -->
-          <input type="password" id="contrasena-nueva" value="123456" autocomplete="new-password" required>
+        <div class="us-campo">
+          <label for="us-contrasena" id="us-etiqueta-contrasena">Contraseña inicial</label>
+          <!-- Al crear viene 123456: al entrar con ella el sistema obliga a cambiarla.
+               Al editar, vacío = no se cambia. -->
+          <input type="password" id="us-contrasena" autocomplete="new-password">
+          <small class="us-ayuda" id="us-ayuda-contrasena">Con 123456 el sistema le pedirá cambiarla al entrar.</small>
         </div>
 
-        <div>
-          <label for="rol-nuevo">Rol</label>
-          <!-- Al cambiar el rol, usuarios.js marca los permisos sugeridos.
-               La opción "super_administrador" se elimina del selector si quien
-               está usando la pantalla no lo es. -->
-          <select id="rol-nuevo" required>
-            <option value="">Seleccione un rol</option>
-            <option value="super_administrador">Super administrador</option>
-            <option value="administrador">Administrador</option>
-            <option value="operario">Operario</option>
-            <option value="supervisor">Supervisor</option>
-          </select>
-        </div>
-
-        <!-- Permisos de acceso agrupados por rol, con sugerencia automatica -->
-        <fieldset class="permisos-usuario">
-          <legend>Permisos de acceso (sugeridos segun el rol, ajustables)</legend>
-          <!-- Este aviso solo se ve al elegir "Super administrador" -->
-          <p class="permisos-nota-superadmin" id="nota-superadmin-nuevo" hidden>
-            El super administrador tiene acceso total a todos los modulos automaticamente.
-          </p>
-          <!-- Árbol de casillas que genera usuarios.js -->
-          <div class="arbol-roles arbol-roles-formulario" id="arbol-permisos-nuevo"></div>
+        <fieldset class="us-campo">
+          <legend>Rol</legend>
+          <div class="us-roles-elegir" id="us-roles-elegir" role="radiogroup" aria-label="Rol"></div>
         </fieldset>
 
-        <button type="submit">Crear usuario</button>
-      </form>
-    </section>
-
-    <!-- Tabla de usuarios existentes y permisos editables -->
-    <section class="panel registros">
-      <div class="titulo-tabla">
-        <h2>Usuarios creados</h2>
-        <strong><span id="cantidad-usuarios">0</span> usuarios</strong>
+        <fieldset class="us-campo" id="us-bloque-permisos">
+          <legend>Permisos</legend>
+          <p class="us-ayuda">Los marcados <b class="us-marca-rol">del rol</b> vienen con el rol elegido. Si enciendes otro, queda como <b class="us-marca-extra">extra</b>.</p>
+          <div id="us-permisos"></div>
+          <button type="button" class="us-restaurar" id="us-restaurar">↺ Volver a los permisos del rol</button>
+        </fieldset>
+        <p class="us-nota-total" id="us-nota-total" hidden>👑 El super administrador tiene acceso total a todos los módulos.</p>
       </div>
 
-      <table class="tabla-usuarios">
-        <thead>
-          <tr>
-            <th>Usuario</th>
-            <th>Rol</th> <!-- Selector desplegable por fila -->
-            <th>Permisos</th> <!-- Desplegable con las casillas -->
-            <th>Nueva contrasena</th> <!-- Vacío = no se cambia -->
-            <th>Acciones</th> <!-- Guardar / Eliminar -->
-          </tr>
-        </thead>
-        <!-- Las filas las genera usuarios.js -->
-        <tbody id="cuerpo-tabla-usuarios"></tbody>
-      </table>
-    </section>
-  </main>
+      <footer class="us-panel-pie">
+        <button type="button" class="boton-secundario" id="us-cancelar">Cancelar</button>
+        <button type="submit" id="us-guardar">Crear usuario</button>
+      </footer>
+    </form>
+  </aside>
 
   <script src="/vendor/sweetalert2.all.min.js"></script>
   <script src="../js/auth.js"></script>
@@ -128,6 +165,6 @@
       aplicarPermisosEnlaces();
     }
   </script>
-  <script src="../js/usuarios.js"></script>
+  <script src="../js/usuarios.js?v=20261015-1"></script>
 </body>
 </html>

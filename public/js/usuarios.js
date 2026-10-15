@@ -3,78 +3,71 @@
 // ----------------------------------------------------------------------------
 // Administra las cuentas del sistema: crear, cambiar rol/contraseña, asignar
 // permisos por vista y eliminar usuarios.
-// La pieza central es GRUPOS_PERMISOS: define qué permisos existen y a qué rol
-// pertenece cada uno. Con ese mismo arreglo se construyen el mapa de consulta,
-// las sugerencias automáticas al elegir rol y los árboles editables.
-// SI CREAS UNA VISTA NUEVA: agrégala a GRUPOS_PERMISOS aquí Y al arreglo
-// VISTAS_DISPONIBLES del backend (src/shared/application/permisos.js).
+// Los permisos son DE CADA USUARIO: el rol solo enciende los que trae de
+// entrada (ROLES) y a la persona se le pueden sumar permisos "extra".
+// SI CREAS UNA VISTA NUEVA: agrégala a PERMISOS (y al rol que la trae) aquí Y
+// al arreglo VISTAS_DISPONIBLES del backend (src/shared/application/permisos.js).
 // ============================================================================
 
-// Elementos del formulario de creación y de la tabla.
-const formularioUsuario = document.getElementById('formulario-usuario');
-const usuarioNuevo = document.getElementById('usuario-nuevo');
-const contrasenaNueva = document.getElementById('contrasena-nueva');
-const rolNuevo = document.getElementById('rol-nuevo');
-const cuerpoTablaUsuarios = document.getElementById('cuerpo-tabla-usuarios');
-const cantidadUsuarios = document.getElementById('cantidad-usuarios');
-const arbolPermisosNuevo = document.getElementById('arbol-permisos-nuevo'); // Checkboxes del formulario
-const notaSuperadminNuevo = document.getElementById('nota-superadmin-nuevo'); // Aviso "acceso total"
-const mapaPermisosRoles = document.getElementById('mapa-permisos-roles'); // Tabla de referencia
-
-// Jerarquia de permisos: que rol suele necesitar cada vista del sistema.
-// Es la base tanto del mapa de referencia como de la sugerencia automatica
-// al crear/editar un usuario; el super administrador siempre tiene acceso total.
-const GRUPOS_PERMISOS = [
-  {
-    rol: 'operario',
-    etiquetaRol: 'Operario',
-    permisos: [{ vista: 'registro', etiqueta: 'Crear registros de combustible' }]
-  },
-  {
-    rol: 'supervisor',
-    etiquetaRol: 'Supervisor',
-    permisos: [
-      { vista: 'tablas', etiqueta: 'Ver registros' },
-      { vista: 'reportes', etiqueta: 'Ver reportes' },
-      { vista: 'tanque_movil', etiqueta: 'Registrar entregas del tanque móvil' },
-      { vista: 'alertas', etiqueta: 'Justificar alertas' },
-      { vista: 'auditoria', etiqueta: 'Consultar auditoría' }
-    ]
-  },
-  {
-    rol: 'administrador',
-    etiquetaRol: 'Administrador',
-    permisos: [
-      { vista: 'tractores', etiqueta: 'Administrar máquinas' },
-      { vista: 'operarios', etiqueta: 'Administrar operarios' },
-      { vista: 'usuarios', etiqueta: 'Administrar usuarios' },
-      { vista: 'auditoria', etiqueta: 'Auditoría y exportación' } // 'auditoria' se repite a propósito
-    ]
-  }
+// Todos los permisos que se pueden asignar, agrupados por área.
+const PERMISOS = [
+  { vista: 'registro', etiqueta: 'Crear registros de combustible', area: 'Operación' },
+  { vista: 'tanque_movil', etiqueta: 'Registrar entregas del tanque móvil', area: 'Operación' },
+  { vista: 'tablas', etiqueta: 'Ver registros', area: 'Consulta' },
+  { vista: 'reportes', etiqueta: 'Ver reportes', area: 'Consulta' },
+  { vista: 'alertas', etiqueta: 'Justificar alertas', area: 'Consulta' },
+  { vista: 'auditoria', etiqueta: 'Consultar auditoría y exportar', area: 'Consulta' },
+  { vista: 'tractores', etiqueta: 'Administrar máquinas', area: 'Administración' },
+  { vista: 'operarios', etiqueta: 'Administrar operarios', area: 'Administración' },
+  { vista: 'usuarios', etiqueta: 'Administrar usuarios', area: 'Administración' }
 ];
 
-// Lista plana de todas las vistas que se pueden asignar.
-const vistasPermisos = GRUPOS_PERMISOS.flatMap((grupo) => grupo.permisos.map((p) => p.vista));
+// Roles y los permisos que cada uno trae de entrada (los mismos que sugería la
+// pantalla anterior). El super administrador tiene acceso total sin permisos.
+const ROLES = [
+  { rol: 'super_administrador', etiqueta: 'Super administrador', icono: '👑', descripcion: 'Acceso total al sistema.', permisos: [] },
+  { rol: 'administrador', etiqueta: 'Administrador', icono: '🛠️', descripcion: 'Gestiona máquinas, operarios y usuarios.', permisos: ['tractores', 'operarios', 'usuarios', 'auditoria'] },
+  { rol: 'supervisor', etiqueta: 'Supervisor', icono: '📋', descripcion: 'Consulta, valida y registra el tanque móvil.', permisos: ['tablas', 'reportes', 'tanque_movil', 'alertas', 'auditoria'] },
+  { rol: 'operario', etiqueta: 'Operario', icono: '⛽', descripcion: 'Registra el combustible.', permisos: ['registro'] }
+];
+const rolDe = (rol) => ROLES.find((r) => r.rol === rol);
+const etiquetaPermiso = (vista) => PERMISOS.find((p) => p.vista === vista)?.etiqueta || vista;
 
 // Rol de quien esta viendo la pantalla. Solo un super administrador puede
-// asignar o ver el rol "super_administrador"; el resto de administradores
-// gestiona el resto de cuentas (el backend aplica esta misma restriccion).
+// asignar o ver el rol "super_administrador" (el backend aplica la misma regla).
 function obtenerRolActual() {
   const sesion = typeof obtenerSesionActual === 'function' ? obtenerSesionActual() : null;
   return sesion?.rol || '';
 }
+const esSuperAdminActual = obtenerRolActual() === 'super_administrador';
+const ROLES_ASIGNABLES = ROLES.filter((r) => esSuperAdminActual || r.rol !== 'super_administrador');
 
-// Roles que aparecen en los selectores, según quién esté conectado.
-const ROLES_ASIGNABLES =
-  obtenerRolActual() === 'super_administrador'
-    ? ['super_administrador', 'administrador', 'operario', 'supervisor']
-    : ['administrador', 'operario', 'supervisor'];
+// Elementos de la pantalla.
+const campoBuscar = document.getElementById('us-buscar');
+const filtroRol = document.getElementById('us-filtro-rol');
+const filtroEstado = document.getElementById('us-filtro-estado');
+const filas = document.getElementById('us-filas');
+const mensajeVacio = document.getElementById('us-vacio');
+const contador = document.getElementById('us-contador');
+// Panel lateral de crear/editar.
+const fondo = document.getElementById('us-fondo');
+const panel = document.getElementById('us-panel');
+const formulario = document.getElementById('us-formulario');
+const tituloPanel = document.getElementById('us-panel-titulo');
+const campoUsuario = document.getElementById('us-usuario');
+const campoContrasena = document.getElementById('us-contrasena');
+const etiquetaContrasena = document.getElementById('us-etiqueta-contrasena');
+const ayudaContrasena = document.getElementById('us-ayuda-contrasena');
+const eleccionRol = document.getElementById('us-roles-elegir');
+const bloquePermisos = document.getElementById('us-bloque-permisos');
+const listaPermisos = document.getElementById('us-permisos');
+const notaTotal = document.getElementById('us-nota-total');
+const botonGuardar = document.getElementById('us-guardar');
 
-// Lee la sesion para enviar el rol al servidor en APIs administrativas.
-// (Hoy solo declara el tipo de contenido: la identidad va en la cookie.)
-function obtenerCabecerasAdmin() {
-  return { 'Content-Type': 'application/json' };
-}
+let usuarios = [];
+let usuarioEditando = null; // null = creando uno nuevo
+let rolElegido = '';
+let permisosElegidos = new Set();
 
 // Extrae el mensaje de error que envia el backend, con un texto de respaldo.
 async function extraerMensajeError(respuesta, mensajePorDefecto) {
@@ -86,326 +79,257 @@ async function extraerMensajeError(respuesta, mensajePorDefecto) {
   }
 }
 
-// Construye el arbol de solo lectura "Mapa de permisos por rol".
-function construirMapaPermisosRoles() {
-  mapaPermisosRoles.innerHTML = '';
-
-  GRUPOS_PERMISOS.forEach((grupo) => {
-    mapaPermisosRoles.appendChild(crearGrupoArbol(grupo, { editable: false }));
-  });
-
-  // El super administrador no está en GRUPOS_PERMISOS (no tiene permisos
-  // individuales), así que su bloque se agrega aparte.
-  const grupoSuperAdmin = {
-    etiquetaRol: 'Super administrador',
-    permisos: [{ etiqueta: 'Acceso total a todos los módulos' }]
-  };
-  mapaPermisosRoles.appendChild(crearGrupoArbol(grupoSuperAdmin, { editable: false }));
+// Permisos que la persona tiene además de los que trae su rol.
+function permisosExtra(usuario) {
+  if (usuario.rol === 'super_administrador') return [];
+  const delRol = rolDe(usuario.rol)?.permisos || [];
+  return (usuario.permisos || []).filter((vista) => !delRol.includes(vista));
+}
+// "Pendiente" = todavía entra con la contraseña inicial y debe cambiarla.
+const estadoDe = (usuario) => (usuario.debe_cambiar_contrasena ? 'pendiente' : 'activo');
+const iniciales = (nombre) => String(nombre || '?').replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase() || '?';
+function fechaCorta(valor) {
+  const fecha = valor ? new Date(valor) : null;
+  return fecha && !Number.isNaN(fecha.getTime()) ? fecha.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 }
 
-// Crea un bloque "Rol -> lista de permisos" con conectores de arbol via CSS.
-// Si editable=true, cada permiso es un checkbox marcable; si no, es solo texto.
-function crearGrupoArbol(grupo, { editable, permisosActivos, deshabilitado, usuarioId }) {
-  const contenedor = document.createElement('div');
-  contenedor.className = 'grupo-permiso-rol';
-  if (grupo.rol) contenedor.dataset.rol = grupo.rol;
-
-  const titulo = document.createElement('div');
-  titulo.className = 'arbol-rol-nombre';
-  titulo.textContent = grupo.etiquetaRol;
-  contenedor.appendChild(titulo);
-
-  const lista = document.createElement('ul');
-  lista.className = 'arbol-permisos';
-
-  grupo.permisos.forEach((permiso) => {
-    const item = document.createElement('li');
-
-    if (!editable || !permiso.vista) {
-      item.textContent = permiso.etiqueta; // Modo consulta: solo texto
-    } else {
-      // Modo edición: checkbox marcado si el usuario ya tiene ese permiso.
-      const label = document.createElement('label');
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.value = permiso.vista;
-      checkbox.dataset.vista = permiso.vista;
-      checkbox.checked = Boolean(permisosActivos && permisosActivos.includes(permiso.vista));
-      checkbox.disabled = Boolean(deshabilitado);
-      if (usuarioId !== undefined) checkbox.dataset.usuarioId = usuarioId;
-      label.appendChild(checkbox);
-      label.append(' ' + permiso.etiqueta);
-      item.appendChild(label);
-    }
-
-    lista.appendChild(item);
-  });
-
-  contenedor.appendChild(lista);
-  return contenedor;
-}
-
-// Construye el arbol editable de permisos, usado en el formulario de creacion
-// y en cada fila de la tabla de usuarios.
-function construirArbolPermisosEditable(permisosActivos, deshabilitado, usuarioId) {
-  // El fragmento permite armar todo en memoria y agregarlo de una sola vez.
-  const fragmento = document.createDocumentFragment();
-  GRUPOS_PERMISOS.forEach((grupo) => {
-    fragmento.appendChild(
-      crearGrupoArbol(grupo, { editable: true, permisosActivos, deshabilitado, usuarioId })
-    );
-  });
-  return fragmento;
-}
-
-// Marca solo los permisos sugeridos para el rol elegido en el formulario de creacion.
-function aplicarSugerenciaDeRol() {
-  const rolSeleccionado = rolNuevo.value;
-  const esSuperAdmin = rolSeleccionado === 'super_administrador';
-
-  // Al super administrador no se le asignan permisos: se oculta el árbol y se
-  // muestra la nota de acceso total.
-  notaSuperadminNuevo.hidden = !esSuperAdmin;
-  arbolPermisosNuevo.hidden = esSuperAdmin;
-
-  const grupo = GRUPOS_PERMISOS.find((g) => g.rol === rolSeleccionado);
-  const sugeridos = grupo ? grupo.permisos.map((p) => p.vista) : [];
-
-  // Los sugeridos quedan marcados y el resto desmarcados (son solo una
-  // propuesta: quien crea la cuenta puede cambiarlos antes de guardar).
-  arbolPermisosNuevo.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
-    checkbox.checked = sugeridos.includes(checkbox.value);
-  });
-}
-
-// Obtiene los permisos marcados en el formulario de crear usuario.
-function obtenerPermisosFormulario() {
-  const marcados = Array.from(arbolPermisosNuevo.querySelectorAll('input:checked')).map(
-    (permiso) => permiso.value
-  );
-  // Algunas vistas (ej. auditoria) aparecen en mas de un grupo de rol, asi
-  // que puede haber dos checkboxes con el mismo valor marcados a la vez.
-  return [...new Set(marcados)]; // Set elimina los duplicados
-}
-
-// Carga usuarios desde MySQL usando la API de Express.
+// --- Carga y lista ---------------------------------------------------------
 async function cargarUsuarios() {
-  const respuesta = await fetch('/api/usuarios', {
-    headers: obtenerCabecerasAdmin()
-  });
+  const respuesta = await fetch('/api/usuarios', { headers: { 'Content-Type': 'application/json' } });
 
-  // Sin permiso o con error: la tabla queda vacía y se explica el motivo.
+  // Sin permiso o con error: la lista queda vacía y se explica el motivo.
   if (!respuesta.ok) {
-    cuerpoTablaUsuarios.innerHTML = '';
-    cantidadUsuarios.textContent = '0';
+    usuarios = [];
+    pintar();
     const mensaje = await extraerMensajeError(respuesta, 'No se pudo cargar la lista de usuarios.');
     mostrarAlertaError('No se pudo cargar la lista', mensaje);
     return;
   }
-
-  const usuarios = await respuesta.json();
-  pintarUsuarios(usuarios);
+  usuarios = await respuesta.json();
+  pintar();
 }
 
-// Construye la celda de permisos: un resumen compacto que se expande al
-// arbol editable, en vez de siete columnas fijas de checkboxes.
-function crearCeldaPermisos(usuario) {
-  const celda = document.createElement('td');
-  celda.className = 'celda-permisos';
-
-  // El super administrador no tiene checkboxes: solo una etiqueta.
-  if (usuario.rol === 'super_administrador') {
-    const chip = document.createElement('span');
-    chip.className = 'chip-permiso-total';
-    chip.textContent = 'Acceso total';
-    celda.appendChild(chip);
-    return celda;
-  }
-
-  // <details>/<summary>: el navegador maneja solo el desplegable.
-  const detalle = document.createElement('details');
-  detalle.className = 'permisos-detalle';
-
-  const resumen = document.createElement('summary');
-  const cantidad = usuario.permisos.length;
-  resumen.textContent = cantidad === 1 ? '1 permiso' : `${cantidad} permisos`;
-  detalle.appendChild(resumen);
-
-  const arbol = document.createElement('div');
-  arbol.className = 'arbol-roles arbol-roles-compacto';
-  arbol.appendChild(construirArbolPermisosEditable(usuario.permisos, false, usuario.id));
-  detalle.appendChild(arbol);
-
-  celda.appendChild(detalle);
-  return celda;
+function pintarResumen() {
+  document.getElementById('us-kpi-total').textContent = usuarios.length;
+  document.getElementById('us-kpi-activos').textContent = usuarios.filter((u) => estadoDe(u) === 'activo').length;
+  document.getElementById('us-kpi-pendientes').textContent = usuarios.filter((u) => estadoDe(u) === 'pendiente').length;
+  document.getElementById('us-kpi-extra').textContent = usuarios.filter((u) => permisosExtra(u).length).length;
 }
 
-// Pinta la tabla de usuarios y permite editar permisos.
-function pintarUsuarios(usuarios) {
-  cuerpoTablaUsuarios.innerHTML = '';
-  cantidadUsuarios.textContent = usuarios.length;
+function usuariosFiltrados() {
+  const texto = campoBuscar.value.trim().toLowerCase();
+  return usuarios.filter((u) => {
+    const rol = rolDe(u.rol)?.etiqueta || u.rol;
+    if (texto && !`${u.usuario} ${rol}`.toLowerCase().includes(texto)) return false;
+    if (filtroRol.value && u.rol !== filtroRol.value) return false;
+    if (filtroEstado.value === 'extra') return permisosExtra(u).length > 0;
+    return !filtroEstado.value || estadoDe(u) === filtroEstado.value;
+  });
+}
 
-  usuarios.forEach((usuario) => {
-    // Una fila con: nombre | selector de rol | permisos | contraseña | acciones
+function pintar() {
+  pintarResumen();
+  const visibles = usuariosFiltrados();
+  filas.innerHTML = '';
+  mensajeVacio.hidden = visibles.length > 0;
+  contador.textContent = `${visibles.length} de ${usuarios.length} usuario${usuarios.length === 1 ? '' : 's'}`;
+
+  visibles.forEach((usuario) => {
+    const rol = rolDe(usuario.rol);
+    const extra = permisosExtra(usuario);
+    const esTotal = usuario.rol === 'super_administrador';
+    const cantidad = (usuario.permisos || []).length;
+    const pendiente = estadoDe(usuario) === 'pendiente';
     const fila = document.createElement('tr');
-    const celdaUsuario = document.createElement('td');
-    const celdaRol = document.createElement('td');
-    const selectorRol = document.createElement('select');
-    const entradaContrasena = document.createElement('input');
-    const botonGuardar = document.createElement('button');
-    const botonEliminar = document.createElement('button');
-
-    celdaUsuario.textContent = usuario.usuario;
-
-    // Selector con los roles que esta persona puede asignar.
-    ROLES_ASIGNABLES.forEach((rol) => {
-      const opcion = document.createElement('option');
-      opcion.value = rol;
-      opcion.textContent = rol;
-      opcion.selected = usuario.rol === rol;
-      selectorRol.appendChild(opcion);
-    });
-
-    celdaRol.appendChild(selectorRol);
-    fila.appendChild(celdaUsuario);
-    fila.appendChild(celdaRol);
-    fila.appendChild(crearCeldaPermisos(usuario));
-
-    // Campo de contraseña: si se deja vacío, no se cambia.
-    entradaContrasena.type = 'password';
-    entradaContrasena.placeholder = 'Dejar vacio si no cambia';
-    fila.appendChild(crearCeldaConElemento(entradaContrasena));
-
-    // "Guardar" envía rol, contraseña y permisos marcados en esa fila.
-    botonGuardar.type = 'button';
-    botonGuardar.textContent = 'Guardar';
-    botonGuardar.addEventListener('click', async () => {
-      const respuesta = await guardarCambiosUsuario(
-        usuario.id,
-        fila,
-        selectorRol.value,
-        entradaContrasena.value
-      );
-      if (!respuesta.ok) {
-        const mensaje = await extraerMensajeError(respuesta, 'No se pudo actualizar el usuario.');
-        mostrarAlertaError('No se pudo guardar', mensaje);
-        return;
-      }
-      entradaContrasena.value = ''; // Nunca se deja la contraseña escrita en pantalla
-      await cargarUsuarios();
-      mostrarAlertaExito('Usuario actualizado', 'Los cambios del usuario fueron guardados.');
-    });
-
-    botonEliminar.type = 'button';
-    botonEliminar.textContent = 'Eliminar';
-    botonEliminar.className = 'boton-eliminar';
-    botonEliminar.addEventListener('click', async () => {
-      await eliminarUsuario(usuario.id);
-    });
-
-    const celdaAcciones = document.createElement('td');
-    celdaAcciones.className = 'acciones-usuario';
-    celdaAcciones.appendChild(botonGuardar);
-    celdaAcciones.appendChild(botonEliminar);
-    fila.appendChild(celdaAcciones);
-
-    cuerpoTablaUsuarios.appendChild(fila);
+    fila.innerHTML = `
+      <td><div class="us-celda-usuario"><span class="us-avatar us-rol-${escapeHtml(usuario.rol)}">${escapeHtml(iniciales(usuario.usuario))}</span><strong>${escapeHtml(usuario.usuario)}</strong></div></td>
+      <td data-titulo="Rol"><span class="us-chip-rol us-rol-${escapeHtml(usuario.rol)}">${escapeHtml(rol?.etiqueta || usuario.rol)}</span>${
+        extra.length ? ` <span class="us-chip-extra" title="${escapeHtml(extra.map(etiquetaPermiso).join(', '))}">+${extra.length} extra</span>` : ''
+      }</td>
+      <td data-titulo="Permisos">${esTotal ? 'Acceso total' : `${cantidad} permiso${cantidad === 1 ? '' : 's'}`}</td>
+      <td data-titulo="Estado"><span class="us-estado ${pendiente ? 'us-estado-pendiente' : ''}">${pendiente ? 'Debe cambiar contraseña' : 'Activo'}</span></td>
+      <td data-titulo="Creado">${escapeHtml(fechaCorta(usuario.creado_en))}</td>
+      <td class="us-acciones">
+        <button type="button" class="us-icono us-editar" aria-label="Editar ${escapeHtml(usuario.usuario)}" title="Editar">✏️</button>
+        <button type="button" class="us-icono us-borrar" aria-label="Eliminar ${escapeHtml(usuario.usuario)}" title="Eliminar">🗑️</button>
+      </td>`;
+    fila.querySelector('.us-editar').addEventListener('click', () => abrirPanel(usuario));
+    fila.querySelector('.us-borrar').addEventListener('click', () => eliminarUsuario(usuario));
+    filas.appendChild(fila);
   });
 }
 
-// Pequeño ayudante: envuelve un elemento dentro de una celda <td>.
-function crearCeldaConElemento(elemento) {
-  const celda = document.createElement('td');
-  celda.appendChild(elemento);
-  return celda;
+// Guía "Roles del sistema": qué trae cada rol.
+function pintarGuiaRoles() {
+  document.getElementById('us-roles-lista').innerHTML = ROLES.map(
+    (r) => `
+    <div class="us-guia-rol">
+      <span class="us-guia-icono us-rol-${r.rol}" aria-hidden="true">${r.icono}</span>
+      <div>
+        <span class="us-chip-rol us-rol-${r.rol}">${r.etiqueta}</span>
+        <p>${r.descripcion}</p>
+        <small>${r.permisos.length ? r.permisos.map(etiquetaPermiso).join(' · ') : 'Todos los módulos'}</small>
+      </div>
+    </div>`
+  ).join('');
 }
 
-// Lee los permisos marcados en una fila de la tabla.
-function obtenerPermisosFila(fila) {
-  const marcados = Array.from(fila.querySelectorAll('input[type="checkbox"]:checked')).map(
-    (checkbox) => checkbox.dataset.vista
-  );
-  // Algunas vistas (ej. auditoria) aparecen en mas de un grupo de rol, asi
-  // que puede haber dos checkboxes con el mismo valor marcados a la vez.
-  return [...new Set(marcados)];
+// --- Panel lateral de crear / editar ---------------------------------------
+function abrirPanel(usuario = null) {
+  usuarioEditando = usuario;
+  formulario.reset();
+  campoUsuario.value = usuario?.usuario || '';
+  campoUsuario.readOnly = Boolean(usuario); // El nombre de usuario no se cambia
+  campoContrasena.value = usuario ? '' : '123456';
+  campoContrasena.required = !usuario;
+  etiquetaContrasena.textContent = usuario ? 'Nueva contraseña' : 'Contraseña inicial';
+  ayudaContrasena.textContent = usuario
+    ? 'Déjala vacía si no cambia. Si pones 123456, le pedirá cambiarla al entrar.'
+    : 'Con 123456 el sistema le pedirá cambiarla al entrar.';
+  tituloPanel.textContent = usuario ? `Editar usuario: ${usuario.usuario}` : 'Nuevo usuario';
+  botonGuardar.textContent = usuario ? 'Guardar cambios' : 'Crear usuario';
+
+  rolElegido = usuario?.rol || '';
+  permisosElegidos = new Set(usuario ? usuario.permisos || [] : []);
+  pintarEleccionRol();
+  pintarPermisos();
+
+  fondo.hidden = false;
+  panel.hidden = false;
+  document.body.classList.add('us-panel-abierto');
+  (usuario ? campoContrasena : campoUsuario).focus();
 }
 
-// Guarda cambios de rol, contrasena y permisos de un usuario.
-// Devuelve la respuesta sin procesar para que quien llame maneje el error.
-function guardarCambiosUsuario(id, fila, rol, contrasena) {
-  return fetch(`/api/usuarios/${id}`, {
-    method: 'PUT',
-    headers: obtenerCabecerasAdmin(),
-    body: JSON.stringify({
-      rol,
-      contrasena, // Vacío = no se modifica
-      permisos: obtenerPermisosFila(fila)
-    })
+function cerrarPanel() {
+  fondo.hidden = true;
+  panel.hidden = true;
+  document.body.classList.remove('us-panel-abierto');
+  usuarioEditando = null;
+}
+
+// Tarjetas para elegir el rol. Al cambiarlo se encienden sus permisos.
+function pintarEleccionRol() {
+  eleccionRol.innerHTML = '';
+  ROLES_ASIGNABLES.forEach((r) => {
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = `us-opcion-rol${rolElegido === r.rol ? ' activa' : ''}`;
+    boton.setAttribute('role', 'radio');
+    boton.setAttribute('aria-checked', String(rolElegido === r.rol));
+    boton.innerHTML = `<span aria-hidden="true">${r.icono}</span>${r.etiqueta}`;
+    boton.addEventListener('click', () => {
+      rolElegido = r.rol;
+      permisosElegidos = new Set(r.permisos);
+      pintarEleccionRol();
+      pintarPermisos();
+    });
+    eleccionRol.appendChild(boton);
   });
 }
+
+// Interruptores de permisos por área, marcando cuáles son del rol y cuáles extra.
+function pintarPermisos() {
+  const esTotal = rolElegido === 'super_administrador';
+  bloquePermisos.hidden = esTotal || !rolElegido;
+  notaTotal.hidden = !esTotal;
+  if (esTotal || !rolElegido) return;
+
+  const delRol = rolDe(rolElegido)?.permisos || [];
+  listaPermisos.innerHTML = '';
+  [...new Set(PERMISOS.map((p) => p.area))].forEach((area) => {
+    const titulo = document.createElement('h3');
+    titulo.className = 'us-area';
+    titulo.textContent = area;
+    listaPermisos.appendChild(titulo);
+
+    PERMISOS.filter((p) => p.area === area).forEach((permiso) => {
+      const activo = permisosElegidos.has(permiso.vista);
+      const esDelRol = delRol.includes(permiso.vista);
+      const fila = document.createElement('label');
+      fila.className = `us-permiso${activo ? ' activo' : ''}${activo && !esDelRol ? ' es-extra' : ''}`;
+      fila.innerHTML = `
+        <input type="checkbox" class="us-interruptor" ${activo ? 'checked' : ''}>
+        <span class="us-permiso-texto">${escapeHtml(permiso.etiqueta)}</span>
+        ${activo ? `<b class="${esDelRol ? 'us-marca-rol' : 'us-marca-extra'}">${esDelRol ? 'del rol' : 'extra'}</b>` : ''}`;
+      fila.querySelector('input').addEventListener('change', (evento) => {
+        if (evento.target.checked) permisosElegidos.add(permiso.vista);
+        else permisosElegidos.delete(permiso.vista);
+        pintarPermisos();
+      });
+      listaPermisos.appendChild(fila);
+    });
+  });
+}
+
+formulario.addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  if (!rolElegido) {
+    mostrarAlertaError('Falta el rol', 'Elige el rol del usuario.');
+    return;
+  }
+  const permisos = rolElegido === 'super_administrador' ? [] : [...permisosElegidos];
+  const editando = usuarioEditando;
+  botonGuardar.disabled = true;
+  try {
+    const respuesta = await fetch(editando ? `/api/usuarios/${editando.id}` : '/api/usuarios', {
+      method: editando ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(
+        editando
+          ? { rol: rolElegido, contrasena: campoContrasena.value, permisos } // Contraseña vacía = no cambia
+          : { usuario: campoUsuario.value.trim(), contrasena: campoContrasena.value.trim(), rol: rolElegido, permisos }
+      )
+    });
+    if (!respuesta.ok) {
+      const mensaje = await extraerMensajeError(respuesta, editando ? 'No se pudo actualizar el usuario.' : 'No se pudo crear el usuario.');
+      mostrarAlertaError(editando ? 'No se pudo guardar' : 'No se pudo crear el usuario', mensaje);
+      return;
+    }
+    cerrarPanel(); // También borra la contraseña escrita
+    await cargarUsuarios();
+    mostrarAlertaExito(editando ? 'Usuario actualizado' : 'Usuario creado', editando ? 'Los cambios del usuario fueron guardados.' : 'El usuario fue creado correctamente.');
+  } finally {
+    botonGuardar.disabled = false;
+  }
+});
 
 // Elimina un usuario de usuarios_combustible.
 // OJO: este sí es un borrado real (no una anulación como en los otros módulos).
-async function eliminarUsuario(id) {
-  const confirmado = await confirmarAccion(
-    'Eliminar usuario',
-    'Desea eliminar este usuario?',
-    'Si, eliminar'
-  );
+async function eliminarUsuario(usuario) {
+  const confirmado = await confirmarAccion('Eliminar usuario', `¿Desea eliminar el usuario ${usuario.usuario}?`, 'Sí, eliminar');
+  if (!confirmado) return;
 
-  if (!confirmado) {
-    return;
-  }
-
-  const respuesta = await fetch(`/api/usuarios/${id}`, {
+  const respuesta = await fetch(`/api/usuarios/${usuario.id}`, {
     method: 'DELETE',
-    headers: obtenerCabecerasAdmin()
+    headers: { 'Content-Type': 'application/json' }
   });
-
   if (!respuesta.ok) {
     const mensaje = await extraerMensajeError(respuesta, 'No se pudo eliminar el usuario.');
     mostrarAlertaError('No se pudo eliminar', mensaje);
     return;
   }
-
   await cargarUsuarios();
   mostrarAlertaExito('Usuario eliminado', 'El usuario fue eliminado correctamente.');
 }
 
-// Crea un usuario nuevo desde el formulario superior.
-formularioUsuario.addEventListener('submit', async (evento) => {
-  evento.preventDefault();
-
-  const respuesta = await fetch('/api/usuarios', {
-    method: 'POST',
-    headers: obtenerCabecerasAdmin(),
-    body: JSON.stringify({
-      usuario: usuarioNuevo.value.trim(),
-      contrasena: contrasenaNueva.value.trim(),
-      rol: rolNuevo.value,
-      permisos: obtenerPermisosFormulario()
-    })
-  });
-
-  if (!respuesta.ok) {
-    const mensaje = await extraerMensajeError(respuesta, 'No se pudo crear el usuario.');
-    mostrarAlertaError('No se pudo crear el usuario', mensaje);
-    return;
-  }
-
-  formularioUsuario.reset();
-  aplicarSugerenciaDeRol(); // Deja el árbol acorde al rol que quedó seleccionado
-  await cargarUsuarios();
-  mostrarAlertaExito('Usuario creado', 'El usuario fue creado correctamente.');
-});
-
 // --- Arranque de la pantalla ------------------------------------------------
-// Oculta la opcion "Super administrador" del formulario si quien la ve no lo es.
-if (obtenerRolActual() !== 'super_administrador') {
-  rolNuevo.querySelector('option[value="super_administrador"]')?.remove();
-}
+// Sin ser super administrador no se ve esa opción en el filtro.
+if (!esSuperAdminActual) filtroRol.querySelector('option[value="super_administrador"]')?.remove();
 
-arbolPermisosNuevo.appendChild(construirArbolPermisosEditable([], false)); // Árbol vacío inicial
-rolNuevo.addEventListener('change', aplicarSugerenciaDeRol); // Sugerir al cambiar de rol
-construirMapaPermisosRoles(); // Tabla de referencia de permisos
-cargarUsuarios(); // Listado de cuentas
+document.getElementById('us-nuevo').addEventListener('click', () => abrirPanel());
+document.getElementById('us-cerrar').addEventListener('click', cerrarPanel);
+document.getElementById('us-cancelar').addEventListener('click', cerrarPanel);
+document.getElementById('us-restaurar').addEventListener('click', () => {
+  permisosElegidos = new Set(rolDe(rolElegido)?.permisos || []);
+  pintarPermisos();
+});
+fondo.addEventListener('click', cerrarPanel);
+document.addEventListener('keydown', (evento) => {
+  if (evento.key === 'Escape' && !panel.hidden) cerrarPanel();
+});
+campoBuscar.addEventListener('input', pintar);
+filtroRol.addEventListener('change', pintar);
+filtroEstado.addEventListener('change', pintar);
+
+pintarGuiaRoles();
+cargarUsuarios();
