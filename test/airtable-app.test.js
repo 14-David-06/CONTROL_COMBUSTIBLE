@@ -228,7 +228,7 @@ test('auditoría: quedó registrado el login y el cierre; export en CSV funciona
 });
 
 test('cron: jornada del día anterior sin cerrar genera alerta y push', async () => {
-  await api('PUT', `/api/jornadas/${ayer}`, { m1Inicial: '10' }, admin);
+  await api('PUT', `/api/jornadas/${ayer}`, { m1Inicial: '10', m1Final: '12' }, admin);
   const respuesta = await fetch(base + '/api/tareas/recordatorio-cierre', {
     headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` }
   });

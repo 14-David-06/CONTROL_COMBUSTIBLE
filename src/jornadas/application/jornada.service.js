@@ -23,6 +23,10 @@ const CAMPOS_LECTURA = ['m1Inicial', 'm1Final', 'm2Inicial', 'm2Final'];
 const CAMPOS_CHECKLIST = ['fugaBiodiesel', 'sistemaElectrico', 'paradaEmergencia'];
 const redondear = (n) => Math.round(n * 100) / 100;
 
+// ¿Alguien empezó el cierre? (escribió la lectura final de M1 o M2)
+const tieneLecturasFinales = (j) =>
+  [j.m1_final, j.m2_final].some((v) => v !== null && v !== undefined && v !== '');
+
 class JornadaService {
   constructor(repository, alertService, notificador) {
     this.repository = repository;
@@ -117,8 +121,11 @@ class JornadaService {
       hayRegistrosDiaAnterior: Boolean(anterior) || suministrosAnterior > 0,
       hayCierreDiaAnterior: Boolean(cierreAnterior),
       // Si ayer se quedó sin cerrar, el frontend lo avisa y permite cerrarlo.
+      // (Una jornada vacía, sin suministros ni lecturas finales, no se avisa.)
       anteriorAbierta:
-        anterior?.estado === 'abierta' ? convertirJornadaParaFrontend(anterior) : null,
+        anterior?.estado === 'abierta' && (tieneLecturasFinales(anterior) || suministrosAnterior > 0)
+          ? convertirJornadaParaFrontend(anterior)
+          : null,
       m1Anterior: cierreAnterior?.m1_final ?? null, // Lectura con la que debe abrir hoy M1
       m2Anterior: cierreAnterior?.m2_final ?? null // Lectura con la que debe abrir hoy M2
     };
@@ -218,11 +225,19 @@ class JornadaService {
   //   * de días anteriores (vencidas), o
   //   * de hoy, pasada la hora límite (HORA_LIMITE_CIERRE).
   // Tambien devuelve la jornada de hoy si está abierta (para el indicador de borrador).
+  // Una jornada "vacía" (solo el checklist o las lecturas iniciales, que se copian
+  // solas del cierre anterior) NO cuenta: se crea con solo abrir Registrar y
+  // marcar el checklist, aunque ese día no se use la app. Cuenta si ese día
+  // hubo suministros o si alguien empezó a escribir las lecturas finales.
   async pendientes(ahora = new Date()) {
     const hoy = hoyLocal(ahora);
     const abiertas = await this.repository.listAbiertasHasta(hoy);
     const tarde = minutosLocales(ahora) >= horaLimiteCierreMinutos();
-    const pendientes = abiertas
+    const conUso = [];
+    for (const j of abiertas) {
+      if (tieneLecturasFinales(j) || (await this.repository.countSuministros(j.fecha)) > 0) conUso.push(j);
+    }
+    const pendientes = conUso
       .filter((j) => j.fecha < hoy || tarde)
       .map((j) => ({
         ...convertirJornadaParaFrontend(j),

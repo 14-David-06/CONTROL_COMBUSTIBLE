@@ -384,9 +384,18 @@ test('continuidad: la lectura inicial de hoy es la final del cierre de ayer', as
 });
 
 // ------------------------------------------------ pendientes y recordatorios
+test('pendientes: una jornada con solo el checklist (sin uso ese día) no cuenta', async () => {
+  const dia = sumarDias(hoy, -4);
+  await api('PUT', `/api/jornadas/${dia}`, { fugaBiodiesel: 'NO', sistemaElectrico: 'Buen estado', m1Inicial: '10' }, admin);
+  const r = await api('GET', '/api/jornadas/pendientes', undefined, op);
+  assert.equal(r.estado, 200);
+  assert.ok(!r.datos.pendientes.some((p) => p.fecha === dia));
+});
+
 test('pendientes y cron: jornada sin cerrar genera aviso, alerta única y push', async () => {
   const antier = sumarDias(hoy, -2);
-  await api('PUT', `/api/jornadas/${antier}`, { m1Inicial: '10', m2Inicial: '20' }, admin);
+  // Lectura final escrita sin cerrar: la jornada sí cuenta como pendiente.
+  await api('PUT', `/api/jornadas/${antier}`, { m1Inicial: '10', m2Inicial: '20', m1Final: '12' }, admin);
 
   // Un dispositivo suscrito (el del operario).
   let r = await api(
