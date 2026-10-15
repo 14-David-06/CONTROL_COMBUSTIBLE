@@ -3,16 +3,17 @@
      reporte-detalle.html — DETALLE DE UN REPORTE
      Se abre desde las cartas de reportes.html y funciona en dos modos según
      la URL: ?tipo=general (anual) o ?anio=&mes= (mensual).
-     Secciones: buscador, indicadores, gráficas y cinco desplegables
-     (chequeo, cierres M1/M2, registros, consumo por máquina y alertas).
-     Toda la lógica está en ../js/reporte-detalle.js.
+     Arriba: tarjeta del reporte e indicadores. Luego seis pestañas (consumo,
+     cierres, registros, máquinas, operarios y alertas) y el panel de filtros.
+     Al imprimir / exportar PDF salen todas las pestañas seguidas.
+     Toda la lógica está en ../js/reporte-detalle.js (estilos rd- en theme.css).
      ========================================================================== -->
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/styles.css">
-  <link rel="stylesheet" href="../css/theme.css?v=20261003-3">
+  <link rel="stylesheet" href="../css/theme.css?v=20261015-7">
   <title>Detalle de reporte</title>
   <!-- App instalable (PWA): manifiesto, color de la barra y íconos -->
   <link rel="manifest" href="/manifest.webmanifest">
@@ -25,13 +26,15 @@
   <script src="/js/pwa.js" defer></script>
 </head>
 <body>
-  <main class="pantalla">
-    <!-- Encabezado de la tabla mensual seleccionada desde una carta de reportes -->
+  <main class="pantalla vista-rd">
     <!-- El <h1> cambia según el modo: "Reporte general anual" o el mes elegido -->
     <header class="encabezado encabezado-compacto">
       <div class="encabezado-control">
         <div class="logo encabezado-logo"><img src="../assets/WhatsApp Image 2026-08-11 at 6.40.45 AM.jpeg" alt="Logo Guaicaramo SAS"></div>
-        <h1 id="titulo-reporte-mensual">Reporte mensual</h1>
+        <div>
+          <h1 id="titulo-reporte-mensual">Reporte mensual</h1>
+          <p class="rp-subtitulo">Consumo por máquina, operario y periodo</p>
+        </div>
       </div>
       <div class="ubicacion ubicacion-compacta">
         <strong>Barranca de Upia, Meta</strong>
@@ -42,280 +45,198 @@
       </button>
     </header>
 
-    <!-- Busqueda por maquina u operario dentro del mes seleccionado -->
-    <section class="panel controles-reporte">
-      <div class="formulario-busqueda-reporte">
-        <!-- Rango usado por el reporte general para consultar periodos continuos -->
-        <!-- Nace oculto: solo se muestra en modo general (lo destapa el JS) -->
-        <div id="rango-fechas-reporte" hidden>
-          <label for="fecha-inicio-reporte">Desde</label>
-          <input type="date" id="fecha-inicio-reporte" autocomplete="off">
+    <div class="rd-acciones">
+      <a class="rd-volver" href="reportes">← Volver a reportes</a>
+      <span class="rd-espacio"></span>
+      <button class="rd-boton" type="button" id="boton-imprimir-reporte">🖨️ Imprimir</button>
+      <button class="rd-boton rd-principal" type="button" id="boton-exportar-pdf-reporte">⬇ Exportar PDF</button>
+    </div>
 
-          <label for="fecha-fin-reporte">Hasta</label>
-          <input type="date" id="fecha-fin-reporte" autocomplete="off">
+    <!-- Tarjeta del reporte + cuatro indicadores (los llena reporte-detalle.js) -->
+    <section class="rd-resumen">
+      <div class="panel rd-tarjeta-reporte">
+        <span class="rd-icono" aria-hidden="true">📄</span>
+        <div>
+          <small>Reporte</small>
+          <h2 id="rd-nombre-reporte">—</h2>
+          <dl>
+            <dt>Periodo</dt><dd id="rd-periodo">—</dd>
+            <dt>Generado por</dt><dd id="rd-generado">—</dd>
+            <dt>Filtro</dt><dd id="rd-filtro">Todas las máquinas y operarios</dd>
+          </dl>
         </div>
-
-        <label for="buscar-maquina-reporte">Buscar maquina u operario</label>
-        <input type="search" id="buscar-maquina-reporte" placeholder="Escribe maquina u operario" autocomplete="off">
-        <button type="button" id="boton-buscar-maquina">Buscar</button>
-        <button type="button" id="boton-limpiar-busqueda">Limpiar</button>
-        <!-- "Exportar PDF" abre todos los desplegables y lanza la impresión -->
-        <button type="button" id="boton-exportar-pdf-reporte">Exportar PDF</button>
+      </div>
+      <div class="panel rd-kpi">
+        <div class="rd-kpi-cabeza"><span class="rd-icono" aria-hidden="true">⛽</span>Total entregado</div>
+        <strong id="rd-k-total">—</strong>
+        <p id="rd-k-total-p"></p>
+      </div>
+      <div class="panel rd-kpi">
+        <div class="rd-kpi-cabeza"><span class="rd-icono rd-verde" aria-hidden="true">🧮</span>Salida del surtidor (M1+M2)</div>
+        <strong id="rd-k-surtidor">—</strong>
+        <p id="rd-k-surtidor-p"></p>
+      </div>
+      <div class="panel rd-kpi">
+        <div class="rd-kpi-cabeza"><span class="rd-icono rd-azul" aria-hidden="true">📝</span>Registros</div>
+        <strong id="rd-k-registros">—</strong>
+        <p id="rd-k-registros-p"></p>
+      </div>
+      <div class="panel rd-kpi">
+        <div class="rd-kpi-cabeza"><span class="rd-icono rd-rojo" aria-hidden="true">🔔</span>Alertas</div>
+        <strong id="rd-k-alertas">—</strong>
+        <p id="rd-k-alertas-p"></p>
       </div>
     </section>
 
-    <!-- Indicadores/KPIs del periodo seleccionado -->
-    <!-- Las cinco tarjetas las genera renderizarKpisReporte() -->
-    <section class="panel">
-      <div class="titulo-tabla">
-        <div><span class="eyebrow-dashboard">INDICADORES</span><h2>Resumen del periodo</h2></div>
+    <div class="rd-cuerpo">
+      <div class="rd-principal-col">
+        <!-- Pestañas: reporte-detalle.js las pinta con su cuenta -->
+        <nav class="rd-pestanas" role="tablist" id="rd-pestanas" aria-label="Secciones del reporte"></nav>
+
+        <!-- CONSUMO -->
+        <section class="rd-panel" id="rd-p-consumo">
+          <h2 class="rd-titulo-print">Consumo</h2>
+          <div class="panel">
+            <div class="rd-cabecera">
+              <div>
+                <h3 id="rd-t-grafica">Consumo por mes</h3>
+                <p class="rd-sub">Lo que salió del surtidor (M1+M2) contra lo que se entregó en los registros.</p>
+              </div>
+              <div class="rd-segmentado" id="rd-agrupar">
+                <button type="button" class="activo" data-agrupar="mes">Por mes</button>
+                <button type="button" data-agrupar="dia">Por día</button>
+              </div>
+            </div>
+            <div class="rd-leyenda"><span><i class="rd-surtidor"></i>Surtidor M1+M2</span><span><i></i>Entregado</span></div>
+            <div class="rd-columnas" id="rd-g-columnas" role="img" aria-label="Galones del surtidor y entregados por periodo"></div>
+            <div class="rd-etiquetas" id="rd-g-etiquetas"></div>
+            <p class="rd-vacio" id="rd-g-vacio" hidden>No hay consumo en este periodo.</p>
+          </div>
+          <div class="rd-dos">
+            <div class="panel">
+              <h3>Máquinas con mayor consumo</h3>
+              <p class="rd-sub">Top 6 del periodo · sin el tanque móvil</p>
+              <div class="rd-ranking" id="rd-g-ranking"></div>
+            </div>
+            <div class="panel">
+              <h3>Distribución del consumo</h3>
+              <p class="rd-sub">Top 6 máquinas y el resto agrupado</p>
+              <div class="rd-dona-caja" id="rd-g-dona"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- CIERRES M1/M2 + chequeo del equipo -->
+        <section class="rd-panel" id="rd-p-cierres" hidden>
+          <h2 class="rd-titulo-print">Cierres M1 y M2</h2>
+          <div class="panel">
+            <h3>Resumen de cierres</h3>
+            <p class="rd-sub">Cada día el surtidor (M1+M2) se compara con lo registrado a las máquinas.</p>
+            <div class="rd-mini" id="rd-c-mini"></div>
+          </div>
+          <div class="panel">
+            <h3>Cierres del periodo</h3>
+            <p class="rd-sub">Lecturas, galones, conciliación y chequeo del equipo</p>
+            <div class="rd-tabla-caja"><table class="rd-tabla">
+              <thead><tr><th>Fecha</th><th>Estado</th><th class="num">M1 inicial</th><th class="num">M1 final</th><th class="num">Gal M1</th><th class="num">M2 inicial</th><th class="num">M2 final</th><th class="num">Gal M2</th><th class="num">Surtidor</th><th class="num">Registrado</th><th class="num">Diferencia</th><th>Fuga</th><th>Eléctrico</th><th>Parada</th></tr></thead>
+              <tbody id="rd-c-filas"></tbody>
+            </table></div>
+          </div>
+        </section>
+
+        <!-- REGISTROS -->
+        <section class="rd-panel" id="rd-p-registros" hidden>
+          <h2 class="rd-titulo-print">Registros</h2>
+          <div class="panel">
+            <div class="rd-cabecera">
+              <div><h3>Registros del periodo</h3><p class="rd-sub" id="rd-reg-sub"></p></div>
+              <input class="rd-buscador" id="rd-reg-buscar" type="search" placeholder="Buscar máquina, operario o SAI" autocomplete="off">
+            </div>
+            <div class="rd-tabla-caja"><table class="rd-tabla">
+              <thead><tr><th>#</th><th>Fecha</th><th>Máquina</th><th>Tipo</th><th>Operario</th><th>Cédula</th><th class="num">Horómetro</th><th class="num">Galones</th><th>No. SAI</th><th>Estado</th><th>Observaciones</th></tr></thead>
+              <tbody id="rd-reg-filas"></tbody>
+            </table></div>
+            <div class="rd-pie-tabla"><span id="rd-reg-pie"></span><div class="rd-paginas" id="rd-reg-paginas"></div></div>
+          </div>
+        </section>
+
+        <!-- MÁQUINAS -->
+        <section class="rd-panel" id="rd-p-maquinas" hidden>
+          <h2 class="rd-titulo-print">Máquinas</h2>
+          <div class="panel">
+            <div class="rd-cabecera">
+              <div><h3>Consumo por máquina</h3><p class="rd-sub">Todas las máquinas con registros en el periodo</p></div>
+              <select class="rd-buscador" id="rd-maq-orden" aria-label="Ordenar máquinas">
+                <option value="galones">Mayor consumo</option>
+                <option value="menor">Menor consumo</option>
+                <option value="registros">Más registros</option>
+                <option value="alertas">Más alertas</option>
+                <option value="nombre">Nombre (A-Z)</option>
+              </select>
+            </div>
+            <div class="rd-tabla-caja"><table class="rd-tabla">
+              <thead><tr><th>#</th><th>Máquina</th><th>Tipo</th><th class="num">Registros</th><th class="num">Galones</th><th class="num">Promedio</th><th class="num">Máximo</th><th class="num">Capacidad</th><th>Alertas</th></tr></thead>
+              <tbody id="rd-maq-filas"></tbody>
+            </table></div>
+          </div>
+        </section>
+
+        <!-- OPERARIOS -->
+        <section class="rd-panel" id="rd-p-operarios" hidden>
+          <h2 class="rd-titulo-print">Operarios</h2>
+          <div class="panel">
+            <h3>Consumo por operario</h3>
+            <p class="rd-sub">Quién recibió combustible, cuánto y en qué máquinas</p>
+            <div class="rd-tabla-caja"><table class="rd-tabla">
+              <thead><tr><th>#</th><th>Operario</th><th>Cédula</th><th class="num">Registros</th><th class="num">Galones</th><th>Máquinas</th><th>Último registro</th></tr></thead>
+              <tbody id="rd-op-filas"></tbody>
+            </table></div>
+          </div>
+        </section>
+
+        <!-- ALERTAS -->
+        <section class="rd-panel" id="rd-p-alertas" hidden>
+          <h2 class="rd-titulo-print">Alertas</h2>
+          <div class="panel">
+            <h3>Alertas por tipo</h3>
+            <p class="rd-sub">Sobrecapacidad, consumo sobre el promedio, horómetro e inspecciones</p>
+            <div class="rd-mini" id="rd-al-mini"></div>
+          </div>
+          <div class="panel">
+            <h3>Detalle de alertas</h3>
+            <p class="rd-sub">Las pendientes primero</p>
+            <div class="rd-tabla-caja"><table class="rd-tabla">
+              <thead><tr><th>Fecha</th><th>Tipo</th><th>Máquina</th><th class="num">Cantidad</th><th class="num">Capacidad</th><th class="num">Exceso</th><th>Detalle</th><th>Estado</th><th>Justificación</th><th>Soporte</th></tr></thead>
+              <tbody id="rd-al-filas"></tbody>
+            </table></div>
+          </div>
+        </section>
       </div>
-      <div id="kpis-reporte" class="kpis-reporte"></div>
-    </section>
 
-    <!-- Graficas automaticas del consumo -->
-    <!-- <details>/<summary>: bloque plegable nativo del navegador -->
-    <details class="desplegable-reporte desplegable-graficas-reporte">
-      <summary>
-        <span class="icono-desplegable">📊</span>
-        <span class="texto-desplegable">
-          <strong>Graficas de consumo</strong>
-          <small id="subtitulo-graficas-reporte">Vista general de todos los registros</small>
-        </span>
-        <span class="flecha-desplegable" aria-hidden="true">⌄</span>
-      </summary>
-
-      <div class="contenido-desplegable">
-        <div class="titulo-tabla">
-          <div>
-            <h2>Graficas de consumo</h2>
-          </div>
-          <strong><span id="total-consumo-grafica">0.00</span> galones</strong>
-        </div>
-
-        <!-- Tres cifras de contexto sobre las gráficas -->
-        <div class="resumen-graficas">
-          <div class="tarjeta-grafica-resumen">
-            <span>Registros</span>
-            <strong id="resumen-registros-grafica">0</strong>
-          </div>
-          <div class="tarjeta-grafica-resumen">
-            <span>Resumen total</span>
-            <strong><span id="resumen-consumo-grafica">0.00</span> gal</strong>
-          </div>
-          <div class="tarjeta-grafica-resumen">
-            <span>Máquina seleccionada</span>
-            <strong id="resumen-maquina-grafica">GENERAL</strong>
-          </div>
-        </div>
-
-        <!-- Los cuatro <canvas> los dibuja Chart.js desde reporte-detalle.js -->
-        <div class="contenedor-graficas-reporte">
-          <article class="tarjeta-grafica">
-            <!-- El chip de tendencia (📈/📉/➖) aparece dentro de este título -->
-            <h3 id="titulo-grafica-consumo">Resumen general de combustible por fecha<span id="tendencia-consumo" class="tendencia-chip" hidden></span></h3>
-            <div class="lienzo-grafica">
-              <canvas id="grafica-consumo-fecha"></canvas>
+      <!-- FILTROS (en celular va arriba y plegado) -->
+      <aside class="panel rd-filtros">
+        <h3 class="rd-filtros-titulo">⚙️ Filtros</h3>
+        <details id="rd-filtros-plegable" open>
+          <summary>⚙️ Filtros <span class="rd-activos" id="rd-activos-cel"></span></summary>
+          <div class="rd-campos">
+            <div class="rd-par">
+              <label>Desde<input type="date" id="fecha-inicio-reporte" autocomplete="off"></label>
+              <label>Hasta<input type="date" id="fecha-fin-reporte" autocomplete="off"></label>
             </div>
-          </article>
-
-          <!-- Igual a la anterior, pero SOLO maquinaria: sin el tanque móvil ni las
-               máquinas marcadas "Horómetro: No aplica" en Tractores -->
-          <article class="tarjeta-grafica">
-            <h3 id="titulo-grafica-maquinaria">Suministro a maquinaria por fecha</h3>
-            <p class="nota-grafica">Sin tanque móvil ni máquinas sin horómetro · <strong><span id="total-maquinaria-grafica">0.00</span> gal</strong></p>
-            <div class="lienzo-grafica">
-              <canvas id="grafica-maquinaria-fecha" role="img" aria-label="Galones suministrados a maquinaria por fecha"></canvas>
+            <label>Máquina<select id="rd-f-maquina"><option value="">Todas las máquinas</option></select></label>
+            <label>Operario<select id="rd-f-operario"><option value="">Todos los operarios</option></select></label>
+            <div class="rd-botones">
+              <button class="rd-boton rd-principal" type="button" id="rd-f-aplicar">Aplicar filtros</button>
+              <button class="rd-boton" type="button" id="rd-f-limpiar">↺ Limpiar</button>
             </div>
-          </article>
-
-          <article class="tarjeta-grafica">
-            <h3>Consumo M1 y M2</h3>
-            <div class="lienzo-grafica">
-              <canvas id="grafica-m1-m2"></canvas>
-            </div>
-          </article>
-
-          <!-- Este bloque se oculta cuando hay una búsqueda activa por máquina -->
-          <article class="tarjeta-grafica tarjeta-grafica-general" id="bloque-grafica-maquinas">
-            <h3>Consumo acumulado por máquina</h3>
-            <div class="lienzo-grafica">
-              <canvas id="grafica-maquinas"></canvas>
-            </div>
-          </article>
-        </div>
-      </div>
-    </details>
-
-    <!-- Tres secciones del reporte en formato de botones desplegables -->
-    <!-- (hoy son cinco: chequeo, cierres, registros, consumo y alertas) -->
-    <section class="desplegables-reporte" aria-label="Secciones del reporte">
-      <!-- Chequeo del reporte -->
-      <!-- Un renglón por día con checklist diligenciado -->
-      <details class="desplegable-reporte">
-        <summary>
-          <span class="icono-desplegable">🔍</span>
-          <span class="texto-desplegable">
-            <strong>Chequeo del reporte</strong>
-            <small>Inspecciones y estado del equipo</small>
-          </span>
-          <span class="flecha-desplegable" aria-hidden="true">⌄</span>
-        </summary>
-
-        <div class="contenido-desplegable">
-          <div class="titulo-tabla">
-            <h2 id="titulo-chequeo-reporte">Chequeo del mes</h2>
+            <span class="rd-activos" id="rd-activos"></span>
           </div>
-
-          <table class="tabla-reportes">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Fuga biodiesel</th>
-                <th>Sistema electrico</th>
-                <th>Parada emergencia</th>
-              </tr>
-            </thead>
-            <tbody id="cuerpo-chequeo-reporte"></tbody>
-          </table>
-        </div>
-      </details>
-
-      <!-- Cierre diario M1 y M2 -->
-      <!-- Solo las filas marcadas como cierre de día -->
-      <details class="desplegable-reporte">
-        <summary>
-          <span class="icono-desplegable">⛽</span>
-          <span class="texto-desplegable">
-            <strong>Cierre del día M1 y M2</strong>
-            <small>Lecturas y galones despachados</small>
-          </span>
-          <span class="flecha-desplegable" aria-hidden="true">⌄</span>
-        </summary>
-
-        <div class="contenido-desplegable">
-          <div class="titulo-tabla">
-            <h2>Cierre del dia M1 y M2</h2>
-            <strong><span id="total-mangueras-reporte">0.00</span> galones</strong>
-          </div>
-
-          <!-- Conciliación: surtidor (M1+M2) contra lo entregado a las máquinas. -->
-          <p id="conciliacion-reporte" class="conciliacion-reporte"></p>
-
-          <table class="tabla-reportes">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>M1 inicial</th>
-                <th>M1 final</th>
-                <th>Galones M1</th>
-                <th>M2 inicial</th>
-                <th>M2 final</th>
-                <th>Galones M2</th>
-                <th>Total M1 + M2</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody id="cuerpo-mangueras-reporte"></tbody>
-          </table>
-        </div>
-      </details>
-
-      <!-- Registros del reporte -->
-      <!-- Los suministros del periodo (sin los cierres de día) -->
-      <details class="desplegable-reporte">
-        <summary>
-          <span class="icono-desplegable">📋</span>
-          <span class="texto-desplegable">
-            <strong>Registros del reporte</strong>
-            <small>Detalle de operarios, maquinas y cantidades</small>
-          </span>
-          <span class="flecha-desplegable" aria-hidden="true">⌄</span>
-        </summary>
-
-        <div class="contenido-desplegable">
-          <div class="titulo-tabla">
-            <h2 id="titulo-registros-reporte">Registros del mes</h2>
-            <strong><span id="cantidad-registros-mes">0</span> registros</strong>
-          </div>
-
-          <table class="tabla-reportes">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Operario</th>
-                <th>Cedula</th>
-                <th>Maquina</th>
-                <th>Horometro</th>
-                <th>Cantidad</th>
-                <th>No. SAI</th>
-                <th>Observaciones</th>
-              </tr>
-            </thead>
-            <tbody id="cuerpo-registros-mes"></tbody>
-          </table>
-
-          <p class="tabla-vacia" id="mensaje-registros-mes">No hay registros en este mes.</p>
-        </div>
-      </details>
-      <!-- Consumo por maquina del periodo, con tipo de maquina y alertas asociadas -->
-      <details class="desplegable-reporte">
-        <summary>
-          <span class="icono-desplegable">🚜</span>
-          <span class="texto-desplegable">
-            <strong>Consumo por máquina</strong>
-            <small>Registros, promedio y alertas por máquina</small>
-          </span>
-          <span class="flecha-desplegable" aria-hidden="true">⌄</span>
-        </summary>
-        <div class="contenido-desplegable">
-          <div class="titulo-tabla">
-            <h2>Consumo por máquina</h2>
-            <!-- Cambiar el orden reordena la tabla sin volver a consultar el servidor -->
-            <select id="orden-consumo-maquina">
-              <option value="consumo-desc">Mayor consumo</option>
-              <option value="consumo-asc">Menor consumo</option>
-              <option value="registros-desc">Mayor cantidad de registros</option>
-              <option value="alertas-desc">Mayor cantidad de alertas</option>
-            </select>
-          </div>
-          <table class="tabla-reportes">
-            <thead>
-              <tr>
-                <th>Máquina</th>
-                <th>Tipo</th> <!-- Primera palabra de la descripción de la máquina -->
-                <th>Registros</th>
-                <th>Galones consumidos</th>
-                <th>Promedio por suministro</th>
-                <th>Alertas generadas</th>
-              </tr>
-            </thead>
-            <tbody id="cuerpo-consumo-maquina"></tbody>
-          </table>
-          <p class="tabla-vacia" id="mensaje-consumo-maquina" hidden>No hay consumo de máquinas en este periodo.</p>
-        </div>
-      </details>
-
-      <!-- Alertas: primero el conteo por tipo y luego el detalle completo -->
-      <details class="desplegable-reporte">
-        <summary><span class="icono-desplegable">⚠️</span><span class="texto-desplegable"><strong>Alertas del sistema</strong><small>Sobrecapacidad, consumo, horómetro e inspecciones</small></span><span class="flecha-desplegable" aria-hidden="true">⌄</span></summary>
-        <div class="contenido-desplegable">
-          <div class="titulo-tabla"><h2>Resumen de alertas por tipo</h2></div>
-          <table class="tabla-reportes tabla-resumen-alertas">
-            <thead><tr><th>Tipo</th><th>Cantidad</th></tr></thead>
-            <tbody id="cuerpo-resumen-alertas-tipo"></tbody>
-          </table>
-          <div class="titulo-tabla"><h2>Detalle de alertas</h2></div>
-          <table class="tabla-reportes"><thead><tr><th>Fecha</th><th>Tipo</th><th>Máquina</th><th>Cantidad</th><th>Capacidad</th><th>Exceso</th><th>Estado</th><th>Justificación</th><th>Reporte</th></tr></thead><tbody id="cuerpo-alertas-reporte"></tbody></table>
-        </div>
-      </details>
-    </section>
+        </details>
+      </aside>
+    </div>
   </main>
 
   <script src="/vendor/sweetalert2.all.min.js"></script>
-  <!-- Chart.js: única pantalla que lo usa. Debe cargarse ANTES de
-       reporte-detalle.js, que configura sus colores al arrancar. -->
-  <script src="/vendor/chart.umd.js"></script>
   <script src="../js/auth.js"></script>
   <script src="../js/shell.js"></script>
   <script>
@@ -323,6 +244,6 @@
       aplicarPermisosEnlaces();
     }
   </script>
-  <script src="../js/reporte-detalle.js?v=20261003-2"></script>
+  <script src="../js/reporte-detalle.js?v=20261015-3"></script>
 </body>
 </html>

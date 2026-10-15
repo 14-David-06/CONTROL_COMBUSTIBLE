@@ -4,933 +4,620 @@
 // Esta pantalla tiene DOS MODOS, según los parámetros de la URL:
 //   * ?tipo=general        -> reporte anual con rango de fechas editable.
 //   * ?anio=2026&mes=9     -> reporte de un mes concreto.
-// Muestra: indicadores (KPI), gráficas con Chart.js, checklist diario,
-// lecturas de mangueras, registros del periodo, alertas y consumo por máquina.
-// Se refresca solo cada 10 segundos y permite exportar a PDF (impresión).
+// Muestra la tarjeta del reporte, cuatro indicadores y seis pestañas:
+// consumo (gráficas), cierres M1/M2 con chequeo, registros, máquinas,
+// operarios y alertas. Los filtros (fechas, máquina, operario) se aplican en
+// el navegador; en modo general, cambiar las fechas vuelve a pedir los datos.
+// Se refresca solo cada 10 segundos y "Exportar PDF" imprime todas las pestañas.
 // ============================================================================
 
-// --- Elementos de la pantalla ----------------------------------------------
-const tituloReporteMensual = document.getElementById('titulo-reporte-mensual');
-const totalManguerasReporte = document.getElementById('total-mangueras-reporte');
-const tituloChequeoReporte = document.getElementById('titulo-chequeo-reporte');
-const tituloRegistrosReporte = document.getElementById('titulo-registros-reporte');
-const cuerpoManguerasReporte = document.getElementById('cuerpo-mangueras-reporte');
-const cuerpoChequeoReporte = document.getElementById('cuerpo-chequeo-reporte');
-const cantidadRegistrosMes = document.getElementById('cantidad-registros-mes');
-const cuerpoRegistrosMes = document.getElementById('cuerpo-registros-mes');
-const mensajeRegistrosMes = document.getElementById('mensaje-registros-mes');
-const cuerpoAlertasReporte = document.getElementById('cuerpo-alertas-reporte');
-const rangoFechasReporte = document.getElementById('rango-fechas-reporte'); // Solo en modo general
-const fechaInicioReporte = document.getElementById('fecha-inicio-reporte');
-const fechaFinReporte = document.getElementById('fecha-fin-reporte');
-const buscarMaquinaReporte = document.getElementById('buscar-maquina-reporte');
-const botonBuscarMaquina = document.getElementById('boton-buscar-maquina');
-const botonLimpiarBusqueda = document.getElementById('boton-limpiar-busqueda');
-const botonExportarPdfReporte = document.getElementById('boton-exportar-pdf-reporte');
+const $rd = (id) => document.getElementById(id);
 
-// Las graficas de Chart.js no heredan el CSS del tema; sin esto, sus textos
-// y lineas de cuadricula quedarian ilegibles sobre el fondo claro del panel.
-if (typeof Chart !== 'undefined') {
-  Chart.defaults.color = '#5a6f62'; // Color del texto de ejes y leyendas
-  Chart.defaults.borderColor = 'rgba(24,51,39,.08)'; // Líneas de la cuadrícula
-  Chart.defaults.font.family = 'Inter, ui-sans-serif, system-ui, sans-serif';
-}
+const NOMBRES_MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const COLORES_DONA = ['#d96a3d', '#e58a4f', '#f5a524', '#4f8b5e', '#2d5a41', '#4b7bb2'];
+const COLOR_OTRAS = '#b9c2bb';
+const REGISTROS_POR_PAGINA = 15;
+// Diferencia máxima (galones) entre surtidor y registros para decir que un día "cuadra".
+const TOLERANCIA_CIERRE = 2;
 
-const nombresMesesDetalle = [
-  'Enero',
-  'Febrero',
-  'Marzo',
-  'Abril',
-  'Mayo',
-  'Junio',
-  'Julio',
-  'Agosto',
-  'Septiembre',
-  'Octubre',
-  'Noviembre',
-  'Diciembre'
-];
+// Tipos de alerta: nombre, color de la etiqueta y cómo se marca el registro asociado.
+const TIPOS_ALERTA = {
+  sobrecapacidad: { nombre: 'Sobre capacidad', clase: 'rd-e-crit', icono: '⛽', nivel: 'Crítica' },
+  promedio: { nombre: 'Sobre el promedio', clase: 'rd-e-adv', icono: '📈', nivel: 'Advertencia' },
+  horometro_irregular: { nombre: 'Horómetro irregular', clase: 'rd-e-adv', icono: '⏱️', nivel: 'Revisar horómetro' },
+  inspeccion_pendiente: { nombre: 'Inspección pendiente', clase: 'rd-e-adv', icono: '📋', nivel: 'Advertencia' },
+  cierre_pendiente: { nombre: 'Cierre pendiente', clase: 'rd-e-crit', icono: '⏰', nivel: 'Crítica' }
+};
 
-// --- Lectura de los parámetros de la URL ------------------------------------
+// --- Modo según la URL -------------------------------------------------------
 const parametrosReporte = new URLSearchParams(window.location.search);
-const esReporteGeneral = parametrosReporte.get('tipo') === 'general'; // Modo anual
+const esReporteGeneral = parametrosReporte.get('tipo') === 'general';
 const anioReporte = Number(parametrosReporte.get('anio'));
 const mesReporte = Number(parametrosReporte.get('mes'));
-let registrosMensuales = []; // Suministros a máquinas descargados del periodo
-let jornadasMensuales = []; // Jornadas (lecturas M1/M2 + checklist) del periodo: fuente independiente
-let conciliacionActual = null; // Totales del surtidor vs. suministrado, calculados por el servidor
-// Referencias a las gráficas de Chart.js (hay que destruirlas antes de redibujar).
-let graficaConsumoFecha = null;
-let graficaMaquinariaFecha = null; // Solo maquinaria (sin tanque móvil ni máquinas sin horómetro)
-let graficaM1M2 = null;
-let graficaMaquinas = null;
 
-const kpisReporte = document.getElementById('kpis-reporte');
-const cuerpoConsumoMaquina = document.getElementById('cuerpo-consumo-maquina');
-const mensajeConsumoMaquina = document.getElementById('mensaje-consumo-maquina');
-const ordenConsumoMaquina = document.getElementById('orden-consumo-maquina'); // Selector de orden
-const cuerpoResumenAlertasTipo = document.getElementById('cuerpo-resumen-alertas-tipo');
-const tendenciaConsumo = document.getElementById('tendencia-consumo');
+// --- Estado de la pantalla -----------------------------------------------------
+let suministros = []; // Registros de combustible del periodo descargado
+let jornadas = []; // Jornadas (lecturas M1/M2 + checklist) del periodo descargado
+let alertas = []; // Alertas del periodo descargado
+let infoMaquinas = new Map(); // MÁQUINA -> { tipo, capacidad }
+const filtro = { desde: '', hasta: '', maquina: '', operario: '' };
+let limites = { desde: '', hasta: '' }; // Rango completo del reporte (para "Limpiar")
+let agrupar = esReporteGeneral ? 'mes' : 'dia';
+let pagina = 1;
+let pestanaActual = 'consumo';
 
-// Categorias vigentes del sistema de alertas (la categoria "registro incompleto" fue retirada).
-const ETIQUETAS_TIPO_ALERTA = {
-  sobrecapacidad: { label: 'Sobre capacidad', icon: '🔴' },
-  promedio: { label: 'Consumo fuera del promedio', icon: '🟠' },
-  horometro_irregular: { label: 'Horómetro irregular', icon: '🟡' },
-  inspeccion_pendiente: { label: 'Inspección pendiente', icon: '🟣' },
-  cierre_pendiente: { label: 'Cierre pendiente', icon: '⏰' }
+// --- Utilidades ---------------------------------------------------------------
+const numero = (valor) => {
+  const n = Number(String(valor ?? '').trim().replace(',', '.'));
+  return Number.isFinite(n) ? n : 0;
 };
-const ORDEN_TIPOS_ALERTA_REPORTE = ['sobrecapacidad', 'promedio', 'horometro_irregular', 'inspeccion_pendiente', 'cierre_pendiente'];
+const gal = (n, decimales = 1) =>
+  Number(n || 0).toLocaleString('es-CO', { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
+const fechaCorta = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : '');
+const fechaDe = (x) => String(x?.fecha || '').slice(0, 10);
+const nombreMaquina = (m) => String(m || '').trim().toUpperCase();
+// El tanque móvil es un depósito que se rellena, no una máquina que consume.
+const esTanqueMovil = (m) => /^TANQUE M[OÓ][VB]IL/.test(nombreMaquina(m));
+const tipoDe = (m) => (esTanqueMovil(m) ? 'Tanque' : infoMaquinas.get(nombreMaquina(m))?.tipo || '—');
+const vacioFila = (columnas, texto) => `<tr><td colspan="${columnas}" class="rd-vacio">${texto}</td></tr>`;
 
-let alertasDelReporte = []; // Alertas del periodo (ya filtradas)
-let registrosFiltradosActuales = []; // Lo que se está viendo ahora
-let tipoPorMaquina = {}; // Mapa máquina -> tipo (Tractor, Camión...)
-let maquinasSinHorometro = new Set(); // Marcadas "Horómetro: No aplica" en Tractores (no son maquinaria que trabaja por horas)
-
-// Textos y contenedores del bloque de gráficas.
-const subtituloGraficasReporte = document.getElementById('subtitulo-graficas-reporte');
-const totalConsumoGrafica = document.getElementById('total-consumo-grafica');
-const resumenRegistrosGrafica = document.getElementById('resumen-registros-grafica');
-const resumenConsumoGrafica = document.getElementById('resumen-consumo-grafica');
-const resumenMaquinaGrafica = document.getElementById('resumen-maquina-grafica');
-const tituloGraficaConsumo = document.getElementById('titulo-grafica-consumo');
-const bloqueGraficaMaquinas = document.getElementById('bloque-grafica-maquinas');
-
-// Convierte a número cualquier valor, devolviendo 0 si no es válido.
-function numeroGrafica(valor) {
-  if (valor === null || valor === undefined || valor === '') {
-    return 0;
-  }
-
-  // MySQL puede entregar DECIMAL como texto. Ademas aceptamos
-  // valores escritos con coma decimal (por ejemplo, "125,50").
-  if (typeof valor === 'string') {
-    const texto = valor.trim().replace(/\s/g, '').replace(',', '.');
-    const numero = Number(texto);
-    return Number.isFinite(numero) ? numero : 0;
-  }
-
-  const numero = Number(valor);
-  return Number.isFinite(numero) ? numero : 0;
-}
-
-// Obtiene los galones de un registro probando varios campos en orden de
-// prioridad, para que funcione tanto con suministros como con cierres de día.
-function obtenerConsumoRegistro(registro) {
-  // En los suministros, cantidad representa el combustible entregado.
-  const cantidad = numeroGrafica(registro.cantidad);
-  if (cantidad !== 0) return cantidad;
-
-  // Compatibilidad con registros antiguos que pudieran guardar el dato
-  // con otro nombre.
-  const galones = numeroGrafica(registro.galones);
-  if (galones !== 0) return galones;
-
-  // En cierres diarios, el consumo de mangueras se obtiene de M1 + M2.
-  const totalGalones = numeroGrafica(registro.totalGalones);
-  if (totalGalones !== 0) return totalGalones;
-
-  return numeroGrafica(registro.galonesM1) + numeroGrafica(registro.galonesM2);
-}
-
-// El consumo acumulado por maquina debe sumar solamente los suministros
-// asociados a esa maquina. Los cierres M1/M2 no tienen maquina y nunca deben
-// entrar en esta grafica.
-// El tanque móvil ("TANQUE MOVIL", "TANQUE MOVILE", "TANQUE MOBIL"...) es un depósito
-// que se rellena, no una máquina que consume: sus suministros se listan, pero no
-// entran en el Resumen total, los promedios ni el consumo por máquina.
-function esTanqueMovilReporte(registro) {
-  return /^TANQUE M[OÓ][VB]IL/.test(String(registro?.maquina || '').trim().toUpperCase());
-}
-
-// ¿El suministro fue a maquinaria? Se excluyen el tanque móvil y las máquinas
-// marcadas "Horómetro: No aplica" en Tractores (p. ej. control de hormiga).
-function esSuministroAMaquinaria(registro) {
-  const maquina = String(registro?.maquina || '').trim().toUpperCase();
-  return Boolean(maquina) && !esCierreDia(registro) && !esTanqueMovilReporte(registro) && !maquinasSinHorometro.has(maquina);
-}
-
-function obtenerConsumoMaquina(registro) {
-  const cantidad = numeroGrafica(registro.cantidad);
-
-  if (cantidad !== 0) {
-    return cantidad;
-  }
-
-  // Compatibilidad con datos antiguos.
-  return numeroGrafica(registro.galones);
-}
-
-// Chart.js exige destruir una gráfica antes de volver a dibujarla sobre el
-// mismo canvas; si no, quedan superpuestas y el tooltip se vuelve loco.
-function destruirGraficas() {
-  [graficaConsumoFecha, graficaMaquinariaFecha, graficaM1M2, graficaMaquinas].forEach((grafica) => {
-    if (grafica) grafica.destroy();
-  });
-  graficaConsumoFecha = null;
-  graficaMaquinariaFecha = null;
-  graficaM1M2 = null;
-  graficaMaquinas = null;
-}
-
-// Suma los galones por fecha y devuelve pares [fecha, total] ordenados
-// cronológicamente (para la gráfica de línea).
-function agruparConsumoPorFecha(registros) {
-  const mapa = new Map();
-  registros.forEach((registro) => {
-    if (!registro.fecha) return;
-    const consumo = obtenerConsumoRegistro(registro);
-    mapa.set(registro.fecha, (mapa.get(registro.fecha) || 0) + consumo);
-  });
-  return [...mapa.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-}
-
-// Calcula cuánto salió por cada manguera restando final - inicial en cada cierre.
-function calcularConsumoM1M2(registros) {
-  let m1 = 0;
-  let m2 = 0;
-
-  registros.forEach((registro) => {
-    const inicialM1 = numeroGrafica(registro.m1Inicial);
-    const finalM1 = numeroGrafica(registro.m1Final);
-    const inicialM2 = numeroGrafica(registro.m2Inicial);
-    const finalM2 = numeroGrafica(registro.m2Final);
-
-    // Solo se suma si la lectura final es mayor (descarta datos incoherentes).
-    if (finalM1 > inicialM1) m1 += finalM1 - inicialM1;
-    if (finalM2 > inicialM2) m2 += finalM2 - inicialM2;
-  });
-
-  // Si no existen cierres con lecturas completas, usamos los galones guardados.
-  if (m1 === 0 && m2 === 0) {
-    registros.forEach((registro) => {
-      m1 += numeroGrafica(registro.galonesM1);
-      m2 += numeroGrafica(registro.galonesM2);
-    });
-  }
-
-  return { m1, m2 };
-}
-
-// Total de galones por máquina, de mayor a menor.
-function agruparConsumoPorMaquina(registros) {
-  const mapa = new Map();
-
-  registros.forEach((registro) => {
-    // Unicamente los registros que tienen maquina son suministros validos
-    // para esta grafica.
-    const maquina = String(registro.maquina || '').trim().toUpperCase();
-    if (!maquina || esCierreDia(registro)) return;
-    // El tanque móvil no entra en el ranking ni en "Máquina con mayor consumo".
-    if (esTanqueMovilReporte(registro)) return;
-
-    const consumo = obtenerConsumoMaquina(registro);
-    if (!Number.isFinite(consumo) || consumo === 0) return;
-
-    mapa.set(maquina, (mapa.get(maquina) || 0) + consumo);
-  });
-
-  return [...mapa.entries()]
-    .sort((a, b) => b[1] - a[1]);
-}
-
-// Extrae el tipo de maquina (Tractor, Camion, Excavadora, etc.) de la descripcion
-// existente en la tabla de maquinas, sin inventar un campo nuevo.
 function primeraPalabraCapitalizada(texto) {
   const palabra = String(texto || '').trim().split(/\s+/)[0] || '';
-  if (!palabra) return 'Sin tipo';
-  return palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase();
+  return palabra ? palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase() : '';
 }
 
-// Construye el mapa maquina -> tipo a partir del analisis ya existente,
-// que ya une registros con la tabla de maquinas.
-async function cargarTipoPorMaquina() {
+// Una jornada "vacía" se abrió solo por el checklist y nunca tuvo lecturas finales
+// ni suministros: no se muestra en Cierres (no es un día de trabajo).
+function esJornadaVacia(j) {
+  const sinLecturas = [j.m1Final, j.m2Final].every((v) => v === null || v === undefined || String(v).trim() === '');
+  return j.estado !== 'cerrada' && sinLecturas && !suministros.some((r) => fechaDe(r) === j.fecha);
+}
+
+// --- Carga de datos -------------------------------------------------------------
+// Tipo y capacidad de cada máquina (columna "Tipo" y "Capacidad").
+async function cargarInfoMaquinas() {
   try {
     const respuesta = await fetch('/api/analitica/maquinas', { cache: 'no-store' });
     if (!respuesta.ok) return;
     const datos = await respuesta.json();
-    tipoPorMaquina = {};
-    maquinasSinHorometro = new Set();
-    (Array.isArray(datos) ? datos : []).forEach((x) => {
-      const maquina = String(x.maquina || '').trim().toUpperCase();
-      if (maquina) tipoPorMaquina[maquina] = primeraPalabraCapitalizada(x.descripcion);
-      if (maquina && x.sinHorometro) maquinasSinHorometro.add(maquina);
-    });
-  } catch (_) {} // Silencioso: sin este dato la columna "Tipo" dirá "Sin tipo"
+    infoMaquinas = new Map(
+      (Array.isArray(datos) ? datos : []).map((x) => [
+        nombreMaquina(x.maquina),
+        { tipo: primeraPalabraCapitalizada(x.descripcion), capacidad: numero(x.capacidadGalones) }
+      ])
+    );
+  } catch (_) {} // Sin este dato las columnas "Tipo" y "Capacidad" muestran "—"
 }
 
-// KPIs del periodo: resumen total, registros, promedio, alertas y maquina top.
-// El Resumen total y el promedio no incluyen al tanque móvil.
-function renderizarKpisReporte(registros, alertas) {
-  if (!kpisReporte) return;
-  // Los cierres de día no cuentan como suministros.
-  const suministros = registros.filter((registro) => !esCierreDia(registro));
-  const consumos = suministros.filter((registro) => !esTanqueMovilReporte(registro));
-  const totalGalones = consumos.reduce((total, registro) => total + obtenerConsumoRegistro(registro), 0);
-  const totalRegistros = suministros.length;
-  const promedio = consumos.length ? totalGalones / consumos.length : 0;
-  const top = agruparConsumoPorMaquina(registros)[0]; // La de mayor consumo
-
-  const tarjetas = [
-    { clase: 'kpi-consumo', icon: '⛽', label: 'Resumen total', valor: `${totalGalones.toFixed(2)} GAL` },
-    { clase: 'kpi-registros', icon: '📋', label: 'Registros', valor: String(totalRegistros) },
-    { clase: 'kpi-promedio', icon: '📊', label: 'Promedio por suministro', valor: `${promedio.toFixed(2)} GAL` },
-    { clase: 'kpi-alertas', icon: '🔔', label: 'Alertas', valor: String(alertas.length) },
-    { clase: 'kpi-top', icon: '🚜', label: 'Máquina con mayor consumo', valor: top ? top[0] : 'Sin datos', extra: top ? `${top[1].toFixed(2)} GAL` : '' }
-  ];
-
-  kpisReporte.innerHTML = tarjetas.map((t) => `
-    <div class="tarjeta-kpi-reporte ${t.clase}">
-      <span>${t.icon} ${escapeHtml(t.label)}</span>
-      <strong>${escapeHtml(t.valor)}</strong>
-      ${t.extra ? `<small>${escapeHtml(t.extra)}</small>` : ''}
-    </div>`).join('');
+// Suministros y jornadas del periodo. La respuesta es { suministros, jornadas, conciliacion }.
+async function cargarRegistros() {
+  const url = esReporteGeneral
+    ? `/api/reportes-general/registros?${new URLSearchParams({ fechaInicio: limites.desde, fechaFin: limites.hasta })}`
+    : `/api/reportes/${anioReporte}/${mesReporte}/registros`;
+  const respuesta = await fetch(url, { cache: 'no-store' });
+  if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
+  const datos = await respuesta.json();
+  suministros = Array.isArray(datos?.suministros) ? datos.suministros.filter((r) => !r.cierreDia || r.maquina) : [];
+  jornadas = (Array.isArray(datos?.jornadas) ? datos.jornadas : []).map((j) => ({ ...j, fecha: fechaDe(j) }));
 }
 
-// Tendencia de consumo comparando la primera y la segunda mitad del periodo filtrado.
-// Variaciones menores al 5% se consideran "estable".
-function calcularTendencia(consumoFechas) {
-  if (consumoFechas.length < 2) return null; // Con un solo día no hay tendencia
-  const mitad = Math.floor(consumoFechas.length / 2) || 1;
-  const promedio = (arr) => arr.reduce((total, [, valor]) => total + valor, 0) / (arr.length || 1);
-  const promedioInicial = promedio(consumoFechas.slice(0, mitad));
-  const promedioFinal = promedio(consumoFechas.slice(mitad));
-  if (promedioInicial === 0 && promedioFinal === 0) return { tipo: 'estable', variacion: 0 };
-  const variacion = promedioInicial === 0 ? 100 : ((promedioFinal - promedioInicial) / promedioInicial) * 100;
-  if (Math.abs(variacion) < 5) return { tipo: 'estable', variacion };
-  return { tipo: variacion > 0 ? 'aumento' : 'disminucion', variacion };
-}
-
-// Muestra la tendencia como una etiqueta con flecha y porcentaje.
-function renderizarTendencia(consumoFechas) {
-  if (!tendenciaConsumo) return;
-  const tendencia = calcularTendencia(consumoFechas);
-  if (!tendencia) { tendenciaConsumo.hidden = true; return; }
-  const iconos = { aumento: '📈', disminucion: '📉', estable: '➖' };
-  const textos = { aumento: 'En aumento', disminucion: 'En disminución', estable: 'Estable' };
-  tendenciaConsumo.hidden = false;
-  tendenciaConsumo.className = `tendencia-chip ${tendencia.tipo}`;
-  const porcentaje = tendencia.tipo !== 'estable' ? ` (${tendencia.variacion > 0 ? '+' : ''}${tendencia.variacion.toFixed(1)}%)` : '';
-  tendenciaConsumo.textContent = `${iconos[tendencia.tipo]} ${textos[tendencia.tipo]}${porcentaje}`;
-}
-
-// Resumen de consumo por maquina: registros, galones, promedio y alertas asociadas.
-function calcularResumenPorMaquina(registros, alertas) {
-  const mapa = new Map();
-  // Primera pasada: se acumulan registros y galones por máquina.
-  registros.forEach((registro) => {
-    const maquina = String(registro.maquina || '').trim().toUpperCase();
-    if (!maquina || esCierreDia(registro) || esTanqueMovilReporte(registro)) return;
-    const consumo = obtenerConsumoMaquina(registro);
-    if (!mapa.has(maquina)) mapa.set(maquina, { maquina, registros: 0, galones: 0, alertas: 0 });
-    const entrada = mapa.get(maquina);
-    entrada.registros += 1;
-    entrada.galones += Number.isFinite(consumo) ? consumo : 0;
-  });
-  // Segunda pasada: se cuentan las alertas de cada máquina.
-  alertas.forEach((alerta) => {
-    const maquina = String(alerta.maquina || '').trim().toUpperCase();
-    if (!maquina || !mapa.has(maquina)) return;
-    mapa.get(maquina).alertas += 1;
-  });
-  // Se agregan el tipo de máquina y el promedio por suministro.
-  return [...mapa.values()].map((entrada) => ({
-    ...entrada,
-    tipo: tipoPorMaquina[entrada.maquina] || 'Sin tipo',
-    promedio: entrada.registros ? entrada.galones / entrada.registros : 0
-  }));
-}
-
-// Ordena la tabla según el criterio elegido en el selector.
-function ordenarResumenMaquina(lista, criterio) {
-  const copia = [...lista]; // Copia para no alterar el arreglo original
-  if (criterio === 'consumo-asc') return copia.sort((a, b) => a.galones - b.galones);
-  if (criterio === 'registros-desc') return copia.sort((a, b) => b.registros - a.registros);
-  if (criterio === 'alertas-desc') return copia.sort((a, b) => b.alertas - a.alertas);
-  return copia.sort((a, b) => b.galones - a.galones); // Por defecto: mayor consumo primero
-}
-
-// Dibuja la tabla de consumo por máquina.
-function renderizarConsumoPorMaquina(registros, alertas) {
-  if (!cuerpoConsumoMaquina) return;
-  const criterio = ordenConsumoMaquina ? ordenConsumoMaquina.value : 'consumo-desc';
-  const resumen = ordenarResumenMaquina(calcularResumenPorMaquina(registros, alertas), criterio);
-  cuerpoConsumoMaquina.innerHTML = '';
-  if (mensajeConsumoMaquina) mensajeConsumoMaquina.hidden = resumen.length > 0;
-  resumen.forEach((x) => {
-    const fila = document.createElement('tr');
-    [x.maquina, x.tipo, String(x.registros), x.galones.toFixed(2), x.promedio.toFixed(2), String(x.alertas)].forEach((valor) => {
-      const celda = document.createElement('td');
-      celda.textContent = valor;
-      fila.appendChild(celda);
-    });
-    cuerpoConsumoMaquina.appendChild(fila);
-  });
-}
-
-// Resumen de alertas por categoria, usando las mismas etiquetas del panel de alertas.
-// Siempre se muestran los cuatro tipos, aunque alguno esté en cero.
-function renderizarResumenAlertasTipo(alertas) {
-  if (!cuerpoResumenAlertasTipo) return;
-  cuerpoResumenAlertasTipo.innerHTML = '';
-  ORDEN_TIPOS_ALERTA_REPORTE.forEach((tipo) => {
-    const cantidad = alertas.filter((a) => (a.tipo_alerta || 'sobrecapacidad') === tipo).length;
-    const fila = document.createElement('tr');
-    const celdaTipo = document.createElement('td');
-    celdaTipo.textContent = `${ETIQUETAS_TIPO_ALERTA[tipo].icon} ${ETIQUETAS_TIPO_ALERTA[tipo].label}`;
-    const celdaCantidad = document.createElement('td');
-    celdaCantidad.textContent = String(cantidad);
-    fila.append(celdaTipo, celdaCantidad);
-    cuerpoResumenAlertasTipo.appendChild(fila);
-  });
-}
-
-// Punto unico que recalcula KPIs, consumo por maquina y resumen de alertas
-// cada vez que cambian los registros filtrados o las alertas del periodo.
-function actualizarPanelesDerivados() {
-  renderizarKpisReporte(registrosFiltradosActuales, alertasDelReporte);
-  renderizarConsumoPorMaquina(registrosFiltradosActuales, alertasDelReporte);
-  renderizarResumenAlertasTipo(alertasDelReporte);
-}
-
-// Dibuja las tres gráficas de Chart.js: consumo por fecha (línea), reparto
-// M1/M2 (barras) y consumo por máquina (barras horizontales).
-function actualizarGraficas(registros) {
-  if (typeof Chart === 'undefined') return; // La librería no cargó (CDN bloqueado)
-
-  destruirGraficas();
-
-  const lista = Array.isArray(registros) ? registros : [];
-  const busqueda = String(buscarMaquinaReporte.value || '').trim();
-  const maquinaSeleccionada = busqueda || 'GENERAL';
-  const totalConsumo = lista
-    .filter((registro) => !esTanqueMovilReporte(registro)) // Resumen total: sin tanque móvil
-    .reduce((total, registro) => total + obtenerConsumoRegistro(registro), 0);
-  const consumoFechas = agruparConsumoPorFecha(lista);
-  const listaMaquinaria = lista.filter(esSuministroAMaquinaria);
-  const consumoMaquinariaFechas = agruparConsumoPorFecha(listaMaquinaria);
-  const consumoMangueras = calcularConsumoM1M2(jornadasMensuales); // M1/M2 salen de las jornadas, no de los suministros
-  const consumoMaquinas = agruparConsumoPorMaquina(lista);
-
-  renderizarTendencia(consumoFechas);
-
-  // Cifras del encabezado del bloque de gráficas.
-  totalConsumoGrafica.textContent = totalConsumo.toFixed(2);
-  resumenConsumoGrafica.textContent = totalConsumo.toFixed(2);
-  resumenRegistrosGrafica.textContent = String(lista.filter((registro) => !esCierreDia(registro)).length);
-  resumenMaquinaGrafica.textContent = maquinaSeleccionada.toUpperCase();
-
-  // Con búsqueda activa los títulos se personalizan y la gráfica comparativa
-  // entre máquinas se oculta (no tiene sentido con una sola máquina).
-  if (busqueda) {
-    subtituloGraficasReporte.textContent = `Consumo filtrado de ${busqueda.toUpperCase()}`;
-    tituloGraficaConsumo.textContent = `Consumo de ${busqueda.toUpperCase()} por fecha`;
-    bloqueGraficaMaquinas.hidden = true;
-  } else {
-    subtituloGraficasReporte.textContent = 'Vista general de todos los registros';
-    tituloGraficaConsumo.textContent = 'Resumen general de combustible por fecha';
-    bloqueGraficaMaquinas.hidden = false;
-  }
-
-  // Opciones compartidas: las gráficas se adaptan al tamaño del contenedor.
-  const opcionesComunes = {
-    responsive: true,
-    maintainAspectRatio: false,
-    // Siempre desde cero: si no, Chart.js recorta el eje y una barra pequeña
-    // (p. ej. M2) parece desaparecer.
-    scales: { y: { beginAtZero: true } },
-    plugins: {
-      legend: { display: true }
-    }
-  };
-
-  // GRÁFICA 1: evolución del consumo día a día (línea con área rellena).
-  // Con pocos días una línea no se ve (un solo punto): se dibujan barras.
-  graficaConsumoFecha = new Chart(document.getElementById('grafica-consumo-fecha'), {
-    type: consumoFechas.length < 3 ? 'bar' : 'line',
-    data: {
-      labels: consumoFechas.map(([fecha]) => fecha),
-      datasets: [{
-        label: 'Galones consumidos',
-        data: consumoFechas.map(([, consumo]) => Number(consumo.toFixed(2))),
-        tension: 0.25, // Curvatura suave de la línea
-        fill: true,
-        borderColor: '#f5a524',
-        backgroundColor: 'rgba(245,165,36,.14)',
-        pointBackgroundColor: '#f5a524',
-        pointBorderColor: '#171b1e'
-      }]
-    },
-    options: opcionesComunes
-  });
-
-  // GRÁFICA 1B: igual a la 1, pero solo maquinaria (sin tanque móvil ni
-  // máquinas sin horómetro). Una sola serie: el título la nombra, sin leyenda.
-  const totalMaquinaria = listaMaquinaria.reduce((total, registro) => total + obtenerConsumoRegistro(registro), 0);
-  const totalMaquinariaGrafica = document.getElementById('total-maquinaria-grafica');
-  if (totalMaquinariaGrafica) totalMaquinariaGrafica.textContent = totalMaquinaria.toFixed(2);
-  const canvasMaquinaria = document.getElementById('grafica-maquinaria-fecha');
-  if (canvasMaquinaria) {
-    graficaMaquinariaFecha = new Chart(canvasMaquinaria, {
-      type: consumoMaquinariaFechas.length < 3 ? 'bar' : 'line',
-      data: {
-        labels: consumoMaquinariaFechas.map(([fecha]) => fecha),
-        datasets: [{
-          label: 'Galones a maquinaria',
-          data: consumoMaquinariaFechas.map(([, consumo]) => Number(consumo.toFixed(2))),
-          tension: 0.25,
-          fill: true,
-          borderColor: '#2f8f4e',
-          borderWidth: 2,
-          backgroundColor: 'rgba(47,143,78,.14)',
-          pointBackgroundColor: '#2f8f4e',
-          pointBorderColor: '#ffffff',
-          pointRadius: 4,
-          borderRadius: 4
-        }]
-      },
-      options: {
-        ...opcionesComunes,
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: (contexto) => ` ${Number(contexto.parsed.y).toFixed(2)} gal a maquinaria` } }
-        }
-      }
-    });
-  }
-
-  // GRÁFICA 2: cuánto salió por cada manguera del surtidor.
-  graficaM1M2 = new Chart(document.getElementById('grafica-m1-m2'), {
-    type: 'bar',
-    data: {
-      labels: ['M1', 'M2'],
-      datasets: [{
-        label: 'Galones consumidos',
-        data: [Number(consumoMangueras.m1.toFixed(2)), Number(consumoMangueras.m2.toFixed(2))],
-        backgroundColor: ['#5b9fe8', '#f5a524'],
-        borderRadius: 6
-      }]
-    },
-    options: opcionesComunes
-  });
-
-  const canvasMaquinas = document.getElementById('grafica-maquinas');
-  const contenedorMaquinas = canvasMaquinas?.parentElement;
-
-  // La grafica es horizontal. Ajustamos su altura segun la cantidad de
-  // maquinas para que las etiquetas y las barras no se amontonen.
-  if (contenedorMaquinas) {
-    const alturaMaquinas = Math.max(320, consumoMaquinas.length * 30 + 70); // 30 px por máquina
-    contenedorMaquinas.style.height = `${alturaMaquinas}px`;
-  }
-
-  // GRÁFICA 3: ranking de máquinas (barras horizontales por indexAxis:'y').
-  graficaMaquinas = new Chart(canvasMaquinas, {
-    type: 'bar',
-    data: {
-      labels: consumoMaquinas.map(([maquina]) => maquina),
-      datasets: [{
-        label: 'Galones consumidos',
-        data: consumoMaquinas.map(([, consumo]) => Number(consumo.toFixed(2))),
-        backgroundColor: '#f5a524',
-        borderColor: '#c1691f',
-        borderWidth: 1,
-        borderRadius: 6
-      }]
-    },
-    options: {
-      ...opcionesComunes,
-      indexAxis: 'y', // Esto convierte las barras en horizontales
-      scales: {
-        x: {
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'Galones'
-          },
-          ticks: {
-            precision: 0
-          }
-        },
-        y: {
-          ticks: {
-            autoSkip: false // Muestra TODAS las máquinas, sin saltarse etiquetas
-          }
-        }
-      }
-    }
-  });
-}
-
-
-// Convierte numeros vacios o nulos a texto limpio para la tabla.
-function mostrarNumero(valor) {
-  const numero = Number(valor);
-  return Number.isFinite(numero) ? numero.toFixed(2) : '';
-}
-
-// Normaliza textos para que la busqueda funcione aunque escriban espacios, acentos o mayusculas diferentes.
-function normalizarTexto(texto) {
-  return String(texto || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // Quita los acentos separados por NFD
-    .replace(/\s+/g, '');
-}
-
-// Filtra registros por maquina u operario usando texto normalizado.
-function filtrarRegistrosPorBusqueda(registros, textoBusqueda) {
-  const busqueda = normalizarTexto(textoBusqueda);
-
-  if (!busqueda) {
-    return registros; // Sin búsqueda se devuelve todo
-  }
-
-  return registros.filter((registro) => {
-    const maquina = normalizarTexto(registro.maquina);
-    const operario = normalizarTexto(registro.operario);
-
-    return maquina.includes(busqueda) || operario.includes(busqueda);
-  });
-}
-
-// Define por defecto el rango del anio actual para el reporte general.
-function prepararRangoAnual() {
-  const anioActual = new Date().getFullYear();
-  fechaInicioReporte.value = `${anioActual}-01-01`;
-  fechaFinReporte.value = `${anioActual}-12-31`;
-}
-
-// Carga registros por rango de fechas y busqueda libre para el reporte general.
-async function cargarReporteGeneral() {
-  const parametros = new URLSearchParams({
-    fechaInicio: fechaInicioReporte.value,
-    fechaFin: fechaFinReporte.value
-  });
-
-  const respuesta = await fetch(`/api/reportes-general/registros?${parametros.toString()}`);
-  aplicarRespuestaReporte(await respuesta.json());
-  // El filtro por texto se aplica en el navegador, no en el servidor.
-  pintarVistaReporte(filtrarRegistrosPorBusqueda(registrosMensuales, buscarMaquinaReporte.value));
-  await cargarAlertasReporte();
-}
-
-// Carga los registros del mes indicado en la URL o el reporte general.
-
-// Carga y pinta la tabla de alertas del periodo.
-async function cargarAlertasReporte() {
-  if (!cuerpoAlertasReporte) return;
-  // La URL depende del modo: todas las alertas o solo las del mes.
-  let url='';
-  if (esReporteGeneral) {
-    url='/api/alertas';
-  } else if (anioReporte && mesReporte) {
-    url=`/api/alertas/reportes/${anioReporte}/${mesReporte}`;
-  } else return;
+// Alertas: en modo general se piden todas y se recortan al rango; en modo
+// mensual el servidor ya las entrega del mes.
+async function cargarAlertas() {
+  const url = esReporteGeneral ? '/api/alertas' : `/api/alertas/reportes/${anioReporte}/${mesReporte}`;
   try {
-    const respuesta=await fetch(url); const alertas=await respuesta.json();
-    const lista=Array.isArray(alertas)?alertas:[];
-    cuerpoAlertasReporte.innerHTML='';
-    if(!lista.length){cuerpoAlertasReporte.innerHTML='<tr><td colspan="9">No hay alertas registradas.</td></tr>';}
-    else{
-      // Una fila por alerta: fecha, tipo, máquina, cifras, estado, justificación
-      // y el enlace al soporte adjunto si existe.
-      // El enlace usa /api/alertas/:id/soporte (vía protegida por sesión y permiso).
-      lista.forEach(a=>{const fila=document.createElement('tr');const etiqueta=ETIQUETAS_TIPO_ALERTA[a.tipo_alerta]?.label||'Otra alerta';[a.fecha,etiqueta,a.maquina,Number(a.cantidad||0).toFixed(2),Number(a.capacidad_galones||0).toFixed(2),Number(a.exceso_galones||0).toFixed(2),a.estado||'pendiente',a.justificacion||'Sin justificación'].forEach(v=>{const td=document.createElement('td');td.textContent=v;fila.appendChild(td);});const td=document.createElement('td');if(a.reporte_ruta){const link=document.createElement('a');link.href=`/api/alertas/${a.id}/soporte`;link.target='_blank';link.textContent='Abrir reporte';td.appendChild(link);}else td.textContent='Sin reporte';fila.appendChild(td);cuerpoAlertasReporte.appendChild(fila);});
-    }
-
-    // Subconjunto de alertas que respeta el rango de fechas y la busqueda activa,
-    // usado unicamente para los indicadores y resumenes (no altera la tabla de detalle).
-    let filtradas=lista;
-    if (esReporteGeneral) {
-      const inicio=fechaInicioReporte.value, fin=fechaFinReporte.value;
-      filtradas=filtradas.filter(a=>{const fecha=String(a.fecha||'').slice(0,10);return (!inicio||fecha>=inicio)&&(!fin||fecha<=fin);});
-    }
-    filtradas=filtrarRegistrosPorBusqueda(filtradas,buscarMaquinaReporte.value);
-    alertasDelReporte=filtradas;
-    actualizarPanelesDerivados();
-  } catch(e){console.warn('No se pudieron cargar alertas del reporte',e);}
+    const respuesta = await fetch(url, { cache: 'no-store' });
+    if (!respuesta.ok) return;
+    const lista = await respuesta.json();
+    alertas = (Array.isArray(lista) ? lista : [])
+      .map((a) => ({ ...a, fecha: fechaDe(a) }))
+      .filter((a) => a.fecha >= limites.desde && a.fecha <= limites.hasta);
+  } catch (error) {
+    console.warn('No se pudieron cargar las alertas del reporte', error);
+  }
 }
 
-// Arranque: decide qué modo mostrar y carga los datos correspondientes.
-async function cargarDetalleMensual() {
-  if (esReporteGeneral) {
-    // MODO GENERAL: títulos genéricos y selector de rango visible.
-    tituloReporteMensual.textContent = 'Reporte general anual';
-    tituloChequeoReporte.textContent = 'Chequeo del reporte';
-    tituloRegistrosReporte.textContent = 'Registros del reporte';
-    rangoFechasReporte.hidden = false;
-    prepararRangoAnual();
-    await cargarReporteGeneral();
-    await cargarAlertasReporte();
-    return;
-  }
-
-  // Sin año y mes válidos no hay nada que mostrar.
-  if (!anioReporte || !mesReporte) {
-    tituloReporteMensual.textContent = 'Reporte no encontrado';
-    return;
-  }
-
-  // MODO MENSUAL: título con el nombre del mes y carga del mes concreto.
-  tituloReporteMensual.textContent = `${nombresMesesDetalle[mesReporte - 1]} ${anioReporte}`;
-
-  const respuesta = await fetch(`/api/reportes/${anioReporte}/${mesReporte}/registros`);
-  aplicarRespuestaReporte(await respuesta.json());
-
-  pintarVistaReporte(registrosMensuales);
-  await cargarAlertasReporte();
+async function cargarTodo() {
+  await Promise.all([cargarRegistros(), cargarAlertas()]);
+  llenarSelectores();
+  pintarTodo();
 }
 
-// Filtra por maquina o por nombre del operario.
-// En modo general vuelve a consultar al servidor (porque cambió el rango);
-// en modo mensual filtra en memoria lo que ya está descargado.
-function buscarReporteMensual() {
-  if (esReporteGeneral) {
-    cargarReporteGeneral();
-    return;
-  }
-
-  pintarVistaReporte(filtrarRegistrosPorBusqueda(registrosMensuales, buscarMaquinaReporte.value));
-  cargarAlertasReporte();
-}
-
-// Regresa la vista a todos los registros del mes.
-function limpiarBusquedaReporte() {
-  buscarMaquinaReporte.value = '';
-
-  if (esReporteGeneral) {
-    prepararRangoAnual(); // También restablece el rango de fechas
-    cargarReporteGeneral();
-    return;
-  }
-
-  pintarVistaReporte(registrosMensuales);
-  cargarAlertasReporte();
-}
-
-// Abre todas las secciones para que el PDF incluya el reporte completo.
-// Después de imprimir se restaura cómo estaban (abiertas o cerradas).
-function exportarPdfReporte() {
-  const secciones = [...document.querySelectorAll('.desplegable-reporte')];
-  const estadosOriginales = secciones.map((seccion) => seccion.open);
-
-  secciones.forEach((seccion) => {
-    seccion.open = true;
-  });
-
-  const restaurarSecciones = () => {
-    secciones.forEach((seccion, indice) => {
-      seccion.open = estadosOriginales[indice];
-    });
-    window.removeEventListener('afterprint', restaurarSecciones); // Se limpia a sí mismo
+// --- Filtros ---------------------------------------------------------------------
+function datosFiltrados() {
+  const dentro = (f) => f >= filtro.desde && f <= filtro.hasta;
+  return {
+    registros: suministros.filter(
+      (r) =>
+        dentro(fechaDe(r)) &&
+        (!filtro.maquina || nombreMaquina(r.maquina) === filtro.maquina) &&
+        (!filtro.operario || r.operario === filtro.operario)
+    ),
+    jornadas: jornadas.filter((j) => dentro(j.fecha)),
+    alertas: alertas.filter((a) => dentro(a.fecha) && (!filtro.maquina || nombreMaquina(a.maquina) === filtro.maquina))
   };
-
-  window.addEventListener('afterprint', restaurarSecciones); // Se dispara al cerrar la impresión
-  window.print(); // El usuario elige "Guardar como PDF"
 }
 
-// Identifica un cierre de dia de forma robusta.
-// Prioriza la marca enviada por el servidor y mantiene compatibilidad con cierres historicos.
-function esCierreDia(registro) {
-  const valor = registro?.cierreDia;
+// Las opciones de máquina y operario salen de los registros descargados.
+function llenarSelectores() {
+  const rellenar = (select, valores, textoTodos) => {
+    const actual = select.value;
+    select.innerHTML = `<option value="">${textoTodos}</option>`;
+    valores.forEach((v) => select.add(new Option(v, v)));
+    select.value = valores.includes(actual) ? actual : '';
+  };
+  rellenar($rd('rd-f-maquina'), [...new Set(suministros.map((r) => nombreMaquina(r.maquina)).filter(Boolean))].sort(), 'Todas las máquinas');
+  rellenar($rd('rd-f-operario'), [...new Set(suministros.map((r) => String(r.operario || '').trim()).filter(Boolean))].sort(), 'Todos los operarios');
+}
 
-  // Caso normal: la bandera viene marcada (en cualquiera de sus formatos).
-  if (valor === true || valor === 1 || valor === '1' || valor === 'true') {
-    return true;
+// --- Pintado ---------------------------------------------------------------------
+function pintarTodo() {
+  const { registros, jornadas: jornadasPeriodo, alertas: alertasPeriodo } = datosFiltrados();
+  pintarCabecera(registros, jornadasPeriodo, alertasPeriodo);
+  pintarConsumo(registros, jornadasPeriodo);
+  pintarCierres(jornadasPeriodo);
+  pintarRegistros(registros, alertasPeriodo);
+  pintarMaquinas(registros, alertasPeriodo);
+  pintarOperarios(registros);
+  pintarAlertas(alertasPeriodo);
+}
+
+// Tarjeta del reporte, indicadores y pestañas con su cuenta.
+function pintarCabecera(registros, jornadasPeriodo, alertasPeriodo) {
+  $rd('rd-periodo').textContent = `${fechaCorta(filtro.desde)} – ${fechaCorta(filtro.hasta)}`;
+  const partes = [filtro.maquina && `Máquina ${filtro.maquina}`, filtro.operario && `Operario ${filtro.operario}`].filter(Boolean);
+  $rd('rd-filtro').textContent = partes.join(' · ') || 'Todas las máquinas y operarios';
+  const textoActivos = partes.length ? `${partes.length} filtro(s) activo(s)` : '';
+  $rd('rd-activos').textContent = textoActivos;
+  $rd('rd-activos-cel').textContent = textoActivos;
+
+  // Total entregado (incluye lo que se pasó al tanque móvil, mostrado aparte).
+  const total = registros.reduce((t, r) => t + numero(r.cantidad), 0);
+  const aTanque = registros.filter((r) => esTanqueMovil(r.maquina)).reduce((t, r) => t + numero(r.cantidad), 0);
+  $rd('rd-k-total').innerHTML = `${gal(total)}<small>gal</small>`;
+  $rd('rd-k-total-p').textContent = aTanque ? `${gal(total - aTanque)} a máquinas · ${gal(aTanque)} al tanque móvil` : 'Todo directo a máquinas';
+
+  // Surtidor: solo jornadas cerradas. Se compara con lo registrado esos mismos días.
+  const cerradas = jornadasPeriodo.filter((j) => j.estado === 'cerrada');
+  const surtidor = cerradas.reduce((t, j) => t + numero(j.totalGalones), 0);
+  $rd('rd-k-surtidor').innerHTML = `${gal(surtidor)}<small>gal</small>`;
+  const pie = $rd('rd-k-surtidor-p');
+  if (filtro.maquina || filtro.operario) {
+    pie.className = '';
+    pie.innerHTML = '<span class="rd-punto"></span>Total del surtidor (no se filtra por máquina)';
+  } else if (!cerradas.length) {
+    pie.className = '';
+    pie.innerHTML = '<span class="rd-punto"></span>Sin días cerrados en el periodo';
+  } else {
+    const diasCerrados = new Set(cerradas.map((j) => j.fecha));
+    const entregado = registros.filter((r) => diasCerrados.has(fechaDe(r))).reduce((t, r) => t + numero(r.cantidad), 0);
+    const diferencia = surtidor - entregado;
+    const cuadra = Math.abs(diferencia) <= TOLERANCIA_CIERRE * cerradas.length;
+    pie.className = cuadra ? 'rd-ok' : 'rd-mal';
+    pie.innerHTML = `<span class="rd-punto"></span>${cuadra ? 'Cuadra con lo registrado' : 'No cuadra con lo registrado'} (dif. ${diferencia >= 0 ? '+' : ''}${gal(diferencia)} gal)`;
   }
 
-  // Caso histórico: tiene las cuatro lecturas de medidores...
-  const tieneLecturas = [
-    registro?.m1Inicial,
-    registro?.m1Final,
-    registro?.m2Inicial,
-    registro?.m2Final
-  ].every((lectura) => lectura !== null && lectura !== undefined && String(lectura).trim() !== '');
+  const maquinas = new Set(registros.map((r) => nombreMaquina(r.maquina))).size;
+  const operarios = new Set(registros.map((r) => r.operario)).size;
+  $rd('rd-k-registros').textContent = String(registros.length);
+  $rd('rd-k-registros-p').textContent = `${maquinas} máquinas · ${operarios} operarios`;
 
-  // ...y no tiene operario ni máquina.
-  const sinSuministro =
-    !String(registro?.operario || '').trim() &&
-    !String(registro?.maquina || '').trim();
+  const pendientes = alertasPeriodo.filter((a) => a.estado !== 'justificada').length;
+  $rd('rd-k-alertas').textContent = String(alertasPeriodo.length);
+  const pieAlertas = $rd('rd-k-alertas-p');
+  pieAlertas.className = pendientes ? 'rd-mal' : 'rd-ok';
+  pieAlertas.innerHTML = `<span class="rd-punto"></span>${
+    alertasPeriodo.length ? `${pendientes} pendientes · ${alertasPeriodo.length - pendientes} justificadas` : 'Sin alertas'
+  }`;
 
-  return tieneLecturas && sinSuministro;
+  pintarPestanas({
+    cierres: jornadasPeriodo.filter((j) => !esJornadaVacia(j)).length,
+    registros: registros.length,
+    maquinas,
+    operarios,
+    alertas: alertasPeriodo.length
+  });
 }
 
-// Guarda lo que devolvió el servidor: las dos fuentes viajan por separado.
-//   suministros -> lo entregado a cada máquina (tabla registros)
-//   jornadas    -> lo que salió del surtidor por día, M1 + M2 (tabla jornadas)
-function aplicarRespuestaReporte(datos) {
-  registrosMensuales = Array.isArray(datos?.suministros) ? datos.suministros : [];
-  jornadasMensuales = Array.isArray(datos?.jornadas) ? datos.jornadas : [];
-  conciliacionActual = datos?.conciliacion || null;
+// Botones de las pestañas. Sin cuentas (mientras carga) se pintan solo los nombres.
+function pintarPestanas(cuentas = {}) {
+  const pestanas = [
+    ['consumo', '📊', 'Consumo'],
+    ['cierres', '⛽', 'Cierres'],
+    ['registros', '📋', 'Registros'],
+    ['maquinas', '🚜', 'Máquinas'],
+    ['operarios', '👷', 'Operarios'],
+    ['alertas', '⚠️', 'Alertas']
+  ];
+  $rd('rd-pestanas').innerHTML = pestanas
+    .map(
+      ([id, icono, nombre]) =>
+        `<button type="button" role="tab" data-pestana="${id}" aria-selected="${id === pestanaActual}">${icono} ${nombre}${
+          cuentas[id] !== undefined ? ` <span class="rd-cuenta">${cuentas[id]}</span>` : ''
+        }</button>`
+    )
+    .join('');
 }
 
-// Pinta las secciones del reporte. Los suministros pueden llegar filtrados por la
-// búsqueda; las jornadas (medidores del surtidor) y el checklist son del periodo
-// completo y no dependen de ese filtro.
-function pintarVistaReporte(registros) {
-  const suministros = Array.isArray(registros) ? registros : [];
+// Columnas surtidor vs. entregado (por mes o por día), ranking y dona.
+function pintarConsumo(registros, jornadasPeriodo) {
+  const cerradas = jornadasPeriodo.filter((j) => j.estado === 'cerrada');
+  const sumaRegistros = (prueba) => registros.filter((r) => prueba(fechaDe(r))).reduce((t, r) => t + numero(r.cantidad), 0);
+  const sumaSurtidor = (prueba) => cerradas.filter((j) => prueba(j.fecha)).reduce((t, j) => t + numero(j.totalGalones), 0);
+  let grupos;
+  if (agrupar === 'mes') {
+    const anio = filtro.desde.slice(0, 4);
+    const desde = Number(filtro.desde.slice(5, 7));
+    const hasta = filtro.hasta.slice(0, 4) === anio ? Number(filtro.hasta.slice(5, 7)) : 12;
+    grupos = [];
+    for (let m = desde; m <= hasta; m++) {
+      const clave = `${anio}-${String(m).padStart(2, '0')}`;
+      grupos.push({ etiqueta: MESES_CORTOS[m - 1], entregado: sumaRegistros((f) => f.startsWith(clave)), surtidor: sumaSurtidor((f) => f.startsWith(clave)) });
+    }
+    $rd('rd-t-grafica').textContent = 'Consumo por mes';
+  } else {
+    const dias = [...new Set([...registros.map(fechaDe), ...cerradas.map((j) => j.fecha)])].sort();
+    grupos = dias.map((d) => ({ etiqueta: `${d.slice(8, 10)}/${d.slice(5, 7)}`, entregado: sumaRegistros((f) => f === d), surtidor: sumaSurtidor((f) => f === d) }));
+    $rd('rd-t-grafica').textContent = 'Consumo por día';
+  }
+  const hayDatos = grupos.some((g) => g.entregado > 0 || g.surtidor > 0);
+  $rd('rd-g-vacio').hidden = hayDatos;
+  const tope = Math.max(1, ...grupos.flatMap((g) => [g.entregado, g.surtidor]));
+  const alto = (v) => `${v > 0 ? Math.max(2, (v / tope) * 92) : 0}%`;
+  const valor = (v) => (v > 0 ? `<b>${Math.round(v).toLocaleString('es-CO')}</b>` : '');
+  $rd('rd-g-columnas').innerHTML = grupos
+    .map(
+      (g) => `<div class="rd-col" title="${g.etiqueta}: surtidor ${gal(g.surtidor)} gal · entregado ${gal(g.entregado)} gal">
+        <div class="rd-pareja"><span class="rd-barra rd-surtidor" style="height:${alto(g.surtidor)}">${valor(g.surtidor)}</span><span class="rd-barra" style="height:${alto(g.entregado)}">${valor(g.entregado)}</span></div>
+      </div>`
+    )
+    .join('');
+  $rd('rd-g-etiquetas').innerHTML = grupos.map((g) => `<span>${g.etiqueta}</span>`).join('');
 
-  pintarChequeoReporte(jornadasMensuales); // El checklist es de la jornada
-  pintarRegistroDiarioMangueras(jornadasMensuales);
-  pintarConciliacion();
-  pintarRegistrosDelMes(suministros);
-  actualizarGraficas(suministros);
+  // Ranking y dona: solo máquinas que consumen (sin el tanque móvil).
+  const porMaquina = new Map();
+  registros
+    .filter((r) => !esTanqueMovil(r.maquina) && nombreMaquina(r.maquina))
+    .forEach((r) => porMaquina.set(nombreMaquina(r.maquina), (porMaquina.get(nombreMaquina(r.maquina)) || 0) + numero(r.cantidad)));
+  const orden = [...porMaquina].sort((a, b) => b[1] - a[1]);
+  const top = orden.slice(0, 6);
+  const maximo = top[0]?.[1] || 1;
+  $rd('rd-g-ranking').innerHTML = top.length
+    ? top
+        .map(
+          ([m, g]) =>
+            `<div class="rd-fila-rank"><b>${escapeHtml(m)}</b><span class="rd-pista"><span style="width:${Math.max(4, (g / maximo) * 100)}%"></span></span><em>${gal(g)} gal</em></div>`
+        )
+        .join('')
+    : '<p class="rd-vacio">Sin consumo de máquinas en el periodo.</p>';
 
-  registrosFiltradosActuales = suministros;
-  actualizarPanelesDerivados();
+  const totalMaquinas = orden.reduce((t, x) => t + x[1], 0);
+  const otras = orden.slice(6).reduce((t, x) => t + x[1], 0);
+  const trozos = [
+    ...top.map(([m, g], i) => ({ m, g, color: COLORES_DONA[i] })),
+    ...(otras > 0 ? [{ m: `Otras (${orden.length - 6})`, g: otras, color: COLOR_OTRAS }] : [])
+  ];
+  const radio = 60;
+  const circunferencia = 2 * Math.PI * radio;
+  let acumulado = 0;
+  const arcos = trozos
+    .map((t) => {
+      const largo = (t.g / (totalMaquinas || 1)) * circunferencia;
+      const arco = `<circle r="${radio}" cx="85" cy="85" fill="none" stroke="${t.color}" stroke-width="24" stroke-dasharray="${largo} ${circunferencia - largo}" stroke-dashoffset="${-acumulado}"></circle>`;
+      acumulado += largo;
+      return arco;
+    })
+    .join('');
+  $rd('rd-g-dona').innerHTML = totalMaquinas
+    ? `<div class="rd-dona"><svg width="170" height="170" viewBox="0 0 170 170" aria-hidden="true">${arcos}</svg><div><strong>${gal(totalMaquinas)}</strong><small>gal a máquinas</small></div></div>
+       <div class="rd-dona-leyenda">${trozos
+         .map((t) => `<div><i style="background:${t.color}"></i><b>${escapeHtml(t.m)}</b><span>${gal((t.g / totalMaquinas) * 100)}%</span><span>${gal(t.g)}</span></div>`)
+         .join('')}</div>`
+    : '<p class="rd-vacio">Sin datos.</p>';
 }
 
-// Conciliación: lo que salió del surtidor frente a lo entregado a las máquinas.
-// Una diferencia grande puede indicar combustible sin asignar (o registros faltantes).
-function pintarConciliacion() {
-  const el = document.getElementById('conciliacion-reporte');
-  if (!el) return;
-  if (!conciliacionActual) {
-    el.textContent = '';
+// Cierres del surtidor: lecturas, conciliación diaria y chequeo del equipo.
+// Las jornadas vacías (solo checklist, sin uso) no se listan.
+function pintarCierres(jornadasPeriodo) {
+  const registradoDia = (fecha) => suministros.filter((r) => fechaDe(r) === fecha).reduce((t, r) => t + numero(r.cantidad), 0);
+  const lecturas = (v) => (v === null || v === undefined || String(v).trim() === '' ? '—' : escapeHtml(v));
+  const chequeo = (v) => {
+    const texto = String(v || '').trim();
+    const clase = !texto ? 'rd-e-gris' : /^no$|buen/i.test(texto) ? 'rd-e-ok' : 'rd-e-crit';
+    return `<span class="rd-etiqueta ${clase}">${escapeHtml(texto || '—')}</span>`;
+  };
+  let cuadran = 0;
+  let revisar = 0;
+  let sinCerrar = 0;
+  const visibles = jornadasPeriodo.filter((j) => !esJornadaVacia(j)).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  $rd('rd-c-filas').innerHTML =
+    visibles
+      .map((j) => {
+        const cerrada = j.estado === 'cerrada';
+        const registrado = registradoDia(j.fecha);
+        const diferencia = cerrada ? numero(j.totalGalones) - registrado : null;
+        let estado;
+        if (!cerrada) {
+          estado = '<span class="rd-etiqueta rd-e-crit">Sin cerrar</span>';
+          sinCerrar++;
+        } else if (Math.abs(diferencia) <= TOLERANCIA_CIERRE) {
+          estado = '<span class="rd-etiqueta rd-e-ok">Cuadra</span>';
+          cuadran++;
+        } else {
+          estado = '<span class="rd-etiqueta rd-e-adv">Revisar</span>';
+          revisar++;
+        }
+        return `<tr><td>${fechaCorta(j.fecha)}</td><td>${estado}</td>
+          <td class="num">${lecturas(j.m1Inicial)}</td><td class="num">${lecturas(j.m1Final)}</td><td class="num">${cerrada ? gal(j.galonesM1) : '—'}</td>
+          <td class="num">${lecturas(j.m2Inicial)}</td><td class="num">${lecturas(j.m2Final)}</td><td class="num">${cerrada ? gal(j.galonesM2) : '—'}</td>
+          <td class="num"><b>${cerrada ? gal(j.totalGalones) : '—'}</b></td><td class="num">${gal(registrado)}</td>
+          <td class="num">${diferencia === null ? '—' : (diferencia >= 0 ? '+' : '') + gal(diferencia)}</td>
+          <td>${chequeo(j.fugaBiodiesel)}</td><td>${chequeo(j.sistemaElectrico)}</td><td>${chequeo(j.paradaEmergencia)}</td></tr>`;
+      })
+      .join('') || vacioFila(14, 'Sin cierres en el periodo.');
+
+  const cerradas = jornadasPeriodo.filter((j) => j.estado === 'cerrada');
+  $rd('rd-c-mini').innerHTML = `
+    <div><small>Días cerrados</small><strong>${cerradas.length}</strong></div>
+    <div><small>Cuadran con lo registrado</small><strong class="rd-ok">${cuadran}</strong></div>
+    <div><small>Para revisar</small><strong class="${revisar ? 'rd-mal' : ''}">${revisar}</strong></div>
+    <div><small>Sin cerrar (con uso)</small><strong class="${sinCerrar ? 'rd-mal' : ''}">${sinCerrar}</strong></div>
+    <div><small>Galones M1 · M2</small><strong>${gal(cerradas.reduce((t, j) => t + numero(j.galonesM1), 0), 0)} · ${gal(cerradas.reduce((t, j) => t + numero(j.galonesM2), 0), 0)}</strong></div>`;
+}
+
+// Estado de un registro según la alerta que generó (por id o por fecha + máquina).
+function alertaDeRegistro(registro, alertasPeriodo) {
+  return alertasPeriodo.find(
+    (a) => (a.registro_id && String(a.registro_id) === String(registro.id)) || (a.fecha === fechaDe(registro) && nombreMaquina(a.maquina) === nombreMaquina(registro.maquina))
+  );
+}
+
+function pintarRegistros(registros, alertasPeriodo) {
+  const busqueda = $rd('rd-reg-buscar').value.trim().toLowerCase();
+  const lista = registros
+    .filter((r) => !busqueda || [r.maquina, r.operario, r.numeroSai, r.cedula].some((v) => String(v || '').toLowerCase().includes(busqueda)))
+    .sort((a, b) => fechaDe(b).localeCompare(fechaDe(a)) || numero(b.cantidad) - numero(a.cantidad));
+  const paginas = Math.max(1, Math.ceil(lista.length / REGISTROS_POR_PAGINA));
+  pagina = Math.min(pagina, paginas);
+  const inicio = (pagina - 1) * REGISTROS_POR_PAGINA;
+  $rd('rd-reg-sub').textContent = `${lista.length} registros · ${gal(lista.reduce((t, r) => t + numero(r.cantidad), 0))} gal`;
+  // Al imprimir salen todos los registros (la clase rd-solo-pantalla oculta la paginación).
+  $rd('rd-reg-filas').innerHTML =
+    lista
+      .map((r, i) => {
+        const alerta = alertaDeRegistro(r, alertasPeriodo);
+        const tipo = alerta ? TIPOS_ALERTA[alerta.tipo_alerta] || TIPOS_ALERTA.sobrecapacidad : null;
+        const estado = esTanqueMovil(r.maquina)
+          ? '<span class="rd-etiqueta rd-e-naranja">Tanque móvil</span>'
+          : tipo
+            ? `<span class="rd-etiqueta ${tipo.clase}">${tipo.nivel}</span>`
+            : '<span class="rd-etiqueta rd-e-ok">Normal</span>';
+        const fuera = i < inicio || i >= inicio + REGISTROS_POR_PAGINA ? ' class="rd-otra-pagina"' : '';
+        return `<tr${fuera}><td>${i + 1}</td><td>${fechaCorta(fechaDe(r))}</td><td><b>${escapeHtml(r.maquina || '')}</b></td><td>${escapeHtml(tipoDe(r.maquina))}</td>
+          <td>${escapeHtml(r.operario || '')}</td><td>${escapeHtml(r.cedula || '')}</td><td class="num">${escapeHtml(r.horometro || '—')}</td>
+          <td class="num"><b>${gal(r.cantidad)}</b></td><td>${escapeHtml(r.numeroSai || '—')}</td><td>${estado}</td><td class="rd-texto">${escapeHtml(r.observaciones || '—')}</td></tr>`;
+      })
+      .join('') || vacioFila(11, 'No hay registros en este periodo.');
+  $rd('rd-reg-pie').textContent = lista.length ? `Mostrando ${inicio + 1} – ${Math.min(inicio + REGISTROS_POR_PAGINA, lista.length)} de ${lista.length}` : '';
+  $rd('rd-reg-paginas').innerHTML =
+    paginas > 1
+      ? `<button type="button" data-pagina="${pagina - 1}" ${pagina === 1 ? 'disabled' : ''} aria-label="Página anterior">‹</button>` +
+        Array.from({ length: paginas }, (_, i) => `<button type="button" data-pagina="${i + 1}" class="${i + 1 === pagina ? 'actual' : ''}">${i + 1}</button>`).join('') +
+        `<button type="button" data-pagina="${pagina + 1}" ${pagina === paginas ? 'disabled' : ''} aria-label="Página siguiente">›</button>`
+      : '';
+}
+
+function pintarMaquinas(registros, alertasPeriodo) {
+  const mapa = new Map();
+  registros.forEach((r) => {
+    const m = nombreMaquina(r.maquina);
+    if (!m) return;
+    const x = mapa.get(m) || { m, n: 0, g: 0, max: 0 };
+    x.n++;
+    x.g += numero(r.cantidad);
+    x.max = Math.max(x.max, numero(r.cantidad));
+    mapa.set(m, x);
+  });
+  const filas = [...mapa.values()].map((x) => ({
+    ...x,
+    alertas: alertasPeriodo.filter((a) => nombreMaquina(a.maquina) === x.m).length,
+    capacidad: infoMaquinas.get(x.m)?.capacidad || 0
+  }));
+  const ordenes = {
+    galones: (a, b) => b.g - a.g,
+    menor: (a, b) => a.g - b.g,
+    registros: (a, b) => b.n - a.n,
+    alertas: (a, b) => b.alertas - a.alertas || b.g - a.g,
+    nombre: (a, b) => a.m.localeCompare(b.m)
+  };
+  $rd('rd-maq-filas').innerHTML =
+    filas
+      .sort(ordenes[$rd('rd-maq-orden').value] || ordenes.galones)
+      .map(
+        (x, i) => `<tr><td>${i + 1}</td><td><b>${escapeHtml(x.m)}</b></td><td>${escapeHtml(tipoDe(x.m))}</td><td class="num">${x.n}</td>
+          <td class="num"><b>${gal(x.g)}</b></td><td class="num">${gal(x.g / x.n)}</td><td class="num">${gal(x.max)}</td>
+          <td class="num">${x.capacidad ? gal(x.capacidad) : '—'}</td>
+          <td><span class="rd-etiqueta ${x.alertas ? 'rd-e-adv' : 'rd-e-ok'}">${x.alertas}</span></td></tr>`
+      )
+      .join('') || vacioFila(9, 'No hay consumo de máquinas en este periodo.');
+}
+
+function pintarOperarios(registros) {
+  const mapa = new Map();
+  registros.forEach((r) => {
+    const nombre = String(r.operario || '').trim() || 'Sin operario';
+    const x = mapa.get(nombre) || { nombre, cedula: r.cedula || '', n: 0, g: 0, maquinas: new Set(), ultimo: '' };
+    x.n++;
+    x.g += numero(r.cantidad);
+    if (r.maquina) x.maquinas.add(nombreMaquina(r.maquina));
+    if (fechaDe(r) > x.ultimo) x.ultimo = fechaDe(r);
+    mapa.set(nombre, x);
+  });
+  $rd('rd-op-filas').innerHTML =
+    [...mapa.values()]
+      .sort((a, b) => b.g - a.g)
+      .map(
+        (x, i) => `<tr><td>${i + 1}</td><td><b>${escapeHtml(x.nombre)}</b></td><td>${escapeHtml(x.cedula)}</td><td class="num">${x.n}</td>
+          <td class="num"><b>${gal(x.g)}</b></td><td class="rd-texto">${escapeHtml([...x.maquinas].join(', '))}</td><td>${fechaCorta(x.ultimo)}</td></tr>`
+      )
+      .join('') || vacioFila(7, 'No hay operarios en este periodo.');
+}
+
+function pintarAlertas(alertasPeriodo) {
+  $rd('rd-al-mini').innerHTML = Object.entries(TIPOS_ALERTA)
+    .map(([clave, t]) => {
+      const n = alertasPeriodo.filter((a) => (a.tipo_alerta || 'sobrecapacidad') === clave).length;
+      return `<div><small>${t.icono} ${t.nombre}</small><strong class="${n ? 'rd-mal' : ''}">${n}</strong></div>`;
+    })
+    .join('');
+  const cifra = (v) => (v === '' || v === null || v === undefined || numero(v) === 0 ? '—' : gal(v, 2));
+  $rd('rd-al-filas').innerHTML =
+    [...alertasPeriodo]
+      .sort((a, b) => (a.estado === 'justificada') - (b.estado === 'justificada') || b.fecha.localeCompare(a.fecha))
+      .map((a) => {
+        const t = TIPOS_ALERTA[a.tipo_alerta] || TIPOS_ALERTA.sobrecapacidad;
+        // El soporte se abre por /api/alertas/:id/soporte (ruta protegida por sesión y permiso).
+        const soporte = a.reporte_ruta ? `<a href="/api/alertas/${encodeURIComponent(a.id)}/soporte" target="_blank" rel="noopener">Abrir</a>` : '—';
+        return `<tr><td>${fechaCorta(a.fecha)}</td><td><span class="rd-etiqueta ${t.clase}">${t.icono} ${t.nombre}</span></td><td><b>${escapeHtml(a.maquina || '')}</b></td>
+          <td class="num">${cifra(a.cantidad)}</td><td class="num">${cifra(a.capacidad_galones)}</td><td class="num">${cifra(a.exceso_galones)}</td>
+          <td class="rd-texto">${escapeHtml(a.detalle_alerta || '—')}</td>
+          <td>${a.estado === 'justificada' ? '<span class="rd-etiqueta rd-e-ok">Justificada</span>' : '<span class="rd-etiqueta rd-e-crit">Pendiente</span>'}</td>
+          <td class="rd-texto">${escapeHtml(a.justificacion || '—')}</td><td>${soporte}</td></tr>`;
+      })
+      .join('') || vacioFila(10, 'No hay alertas en este periodo.');
+}
+
+// --- Arranque ------------------------------------------------------------------------
+function prepararPeriodo() {
+  const sesion = typeof obtenerSesionActual === 'function' ? obtenerSesionActual() : null;
+  const rol = String(sesion?.rol || '').replaceAll('_', ' ');
+  $rd('rd-generado').textContent = sesion ? `${sesion.usuario}${rol ? ` · ${rol.charAt(0).toUpperCase()}${rol.slice(1)}` : ''}` : '—';
+
+  if (esReporteGeneral) {
+    const anio = new Date().getFullYear();
+    limites = { desde: `${anio}-01-01`, hasta: `${anio}-12-31` };
+    $rd('titulo-reporte-mensual').textContent = 'Reporte general anual';
+    $rd('rd-nombre-reporte').textContent = `General anual ${anio}`;
+  } else {
+    const ultimoDia = new Date(anioReporte, mesReporte, 0).getDate();
+    const mes = String(mesReporte).padStart(2, '0');
+    limites = { desde: `${anioReporte}-${mes}-01`, hasta: `${anioReporte}-${mes}-${String(ultimoDia).padStart(2, '0')}` };
+    $rd('titulo-reporte-mensual').textContent = `${NOMBRES_MESES[mesReporte - 1]} ${anioReporte}`;
+    $rd('rd-nombre-reporte').textContent = `Mensual · ${NOMBRES_MESES[mesReporte - 1]} ${anioReporte}`;
+    // En un mes, agrupar por mes no tiene sentido: la gráfica va siempre por día.
+    $rd('rd-agrupar').hidden = true;
+    // Las fechas solo pueden moverse dentro del mes.
+    ['fecha-inicio-reporte', 'fecha-fin-reporte'].forEach((id) => Object.assign($rd(id), { min: limites.desde, max: limites.hasta }));
+  }
+  Object.assign(filtro, limites);
+  $rd('rd-periodo').textContent = `${fechaCorta(filtro.desde)} – ${fechaCorta(filtro.hasta)}`;
+  $rd('fecha-inicio-reporte').value = filtro.desde;
+  $rd('fecha-fin-reporte').value = filtro.hasta;
+}
+
+async function iniciar() {
+  if (!esReporteGeneral && (!anioReporte || !mesReporte)) {
+    $rd('titulo-reporte-mensual').textContent = 'Reporte no encontrado';
     return;
   }
-  const { totalSurtidor, totalSuministrado, diferencia } = conciliacionActual;
-  el.textContent = `Surtidor (M1+M2): ${Number(totalSurtidor).toFixed(2)} gal · Entregado a máquinas: ${Number(totalSuministrado).toFixed(2)} gal · Diferencia: ${Number(diferencia).toFixed(2)} gal`;
-  el.className = `conciliacion-reporte ${Math.abs(Number(diferencia)) > 0.005 ? 'con-diferencia' : 'sin-diferencia'}`;
+  prepararPeriodo();
+  pintarPestanas(); // Visibles desde el inicio; las cuentas llegan con los datos
+  // En celular/tablet los filtros arrancan plegados; en PC siempre abiertos.
+  const pantallaAngosta = matchMedia('(max-width: 980px)');
+  const ajustarFiltros = () => ($rd('rd-filtros-plegable').open = !pantallaAngosta.matches);
+  ajustarFiltros();
+  pantallaAngosta.addEventListener('change', ajustarFiltros);
+  try {
+    await Promise.all([cargarInfoMaquinas(), cargarTodo()]);
+    pintarTodo(); // Con el tipo y la capacidad de cada máquina ya cargados
+  } catch (error) {
+    console.warn('No se pudo cargar el reporte', error);
+  }
 }
 
-// Pinta los datos del checklist guardado desde el formulario principal.
-// Solo se muestra UN checklist por fecha (el primero encontrado).
-function pintarChequeoReporte(registros) {
-  cuerpoChequeoReporte.innerHTML = '';
-  const chequeosPorFecha = new Map();
+// --- Eventos -----------------------------------------------------------------------
+$rd('rd-pestanas').addEventListener('click', (evento) => {
+  const boton = evento.target.closest('button[data-pestana]');
+  if (!boton) return;
+  pestanaActual = boton.dataset.pestana;
+  document.querySelectorAll('#rd-pestanas button').forEach((b) => b.setAttribute('aria-selected', String(b === boton)));
+  document.querySelectorAll('.rd-panel').forEach((panel) => (panel.hidden = panel.id !== `rd-p-${pestanaActual}`));
+});
 
-  registros.forEach((registro) => {
-    const tieneChequeo = registro.fugaBiodiesel || registro.sistemaElectrico || registro.paradaEmergencia;
+$rd('rd-agrupar').addEventListener('click', (evento) => {
+  const boton = evento.target.closest('button[data-agrupar]');
+  if (!boton) return;
+  agrupar = boton.dataset.agrupar;
+  $rd('rd-agrupar').querySelectorAll('button').forEach((b) => b.classList.toggle('activo', b === boton));
+  const { registros, jornadas: jornadasPeriodo } = datosFiltrados();
+  pintarConsumo(registros, jornadasPeriodo);
+});
 
-    // Se descartan los registros sin checklist y las fechas ya incluidas.
-    if (!registro.fecha || !tieneChequeo || chequeosPorFecha.has(registro.fecha)) {
-      return;
-    }
+$rd('rd-reg-buscar').addEventListener('input', () => {
+  pagina = 1;
+  const { registros, alertas: alertasPeriodo } = datosFiltrados();
+  pintarRegistros(registros, alertasPeriodo);
+});
 
-    chequeosPorFecha.set(registro.fecha, registro);
-  });
+$rd('rd-reg-paginas').addEventListener('click', (evento) => {
+  const boton = evento.target.closest('button[data-pagina]');
+  if (!boton || boton.disabled) return;
+  pagina = Number(boton.dataset.pagina);
+  const { registros, alertas: alertasPeriodo } = datosFiltrados();
+  pintarRegistros(registros, alertasPeriodo);
+});
 
-  chequeosPorFecha.forEach((registro) => {
-    const fila = document.createElement('tr');
-    const datos = [
-      registro.fecha,
-      registro.fugaBiodiesel,
-      registro.sistemaElectrico,
-      registro.paradaEmergencia
-    ];
+$rd('rd-maq-orden').addEventListener('change', () => {
+  const { registros, alertas: alertasPeriodo } = datosFiltrados();
+  pintarMaquinas(registros, alertasPeriodo);
+});
 
-    datos.forEach((dato) => {
-      const celda = document.createElement('td');
-      celda.textContent = dato || '';
-      fila.appendChild(celda);
-    });
-
-    cuerpoChequeoReporte.appendChild(fila);
-  });
-}
-
-// Pinta la lectura diaria de mangueras M1 y M2.
-function pintarRegistroDiarioMangueras(registros) {
-  // Total del periodo, mostrado en el encabezado de la sección.
-  const totalMangueras = registros.reduce((total, registro) => {
-    return total + (Number(registro.totalGalones) || 0);
-  }, 0);
-
-  totalManguerasReporte.textContent = totalMangueras.toFixed(2);
-  cuerpoManguerasReporte.innerHTML = '';
-
-  // Una fila por cierre: inicial, final y galones de cada manguera, más el total.
-  registros.forEach((registro) => {
-    const fila = document.createElement('tr');
-    const datos = [
-      registro.fecha,
-      mostrarNumero(registro.m1Inicial),
-      mostrarNumero(registro.m1Final),
-      mostrarNumero(registro.galonesM1),
-      mostrarNumero(registro.m2Inicial),
-      mostrarNumero(registro.m2Final),
-      mostrarNumero(registro.galonesM2),
-      mostrarNumero(registro.totalGalones),
-      registro.estado === 'cerrada' ? 'Cerrada' : 'Abierta (sin cerrar)'
-    ];
-
-    datos.forEach((dato) => {
-      const celda = document.createElement('td');
-      celda.textContent = dato || '';
-      fila.appendChild(celda);
-    });
-
-    cuerpoManguerasReporte.appendChild(fila);
-  });
-}
-
-// Pinta la tabla completa de registros del mes seleccionado.
-function pintarRegistrosDelMes(registros) {
-  cuerpoRegistrosMes.innerHTML = '';
-  cantidadRegistrosMes.textContent = registros.length;
-  mensajeRegistrosMes.hidden = registros.length > 0; // Aviso de "sin registros"
-
-  registros.forEach((registro) => {
-    const fila = document.createElement('tr');
-    const datos = [
-      registro.fecha,
-      registro.operario,
-      registro.cedula,
-      registro.maquina,
-      registro.horometro,
-      mostrarNumero(registro.cantidad),
-      registro.numeroSai,
-      registro.observaciones
-    ];
-
-    datos.forEach((dato) => {
-      const celda = document.createElement('td');
-      celda.textContent = dato || '';
-      fila.appendChild(celda);
-    });
-
-    cuerpoRegistrosMes.appendChild(fila);
-  });
-}
-
-// --- Eventos de la pantalla -------------------------------------------------
-botonBuscarMaquina.addEventListener('click', buscarReporteMensual);
-botonLimpiarBusqueda.addEventListener('click', limpiarBusquedaReporte);
-botonExportarPdfReporte.addEventListener('click', exportarPdfReporte);
-buscarMaquinaReporte.addEventListener('keydown', (evento) => {
-  if (evento.key === 'Enter') {
-    buscarReporteMensual(); // Enter también busca
+// Aplicar: en modo general, si el rango sale de lo descargado se vuelve a pedir al servidor.
+$rd('rd-f-aplicar').addEventListener('click', async () => {
+  let desde = $rd('fecha-inicio-reporte').value || limites.desde;
+  let hasta = $rd('fecha-fin-reporte').value || limites.hasta;
+  if (desde > hasta) [desde, hasta] = [hasta, desde];
+  Object.assign(filtro, { desde, hasta, maquina: $rd('rd-f-maquina').value, operario: $rd('rd-f-operario').value });
+  pagina = 1;
+  if (esReporteGeneral && (desde < limites.desde || hasta > limites.hasta)) {
+    limites = { desde, hasta };
+    await cargarTodo();
+  } else {
+    pintarTodo();
   }
 });
 
-// Cambiar el orden de la tabla no requiere volver a consultar el servidor.
-ordenConsumoMaquina?.addEventListener('change', () => renderizarConsumoPorMaquina(registrosFiltradosActuales, alertasDelReporte));
-
-// Carga inicial: primero los datos, luego el mapa de tipos de máquina.
-cargarDetalleMensual();
-// Al tener el mapa de máquinas se redibujan la tabla y las gráficas (la de
-// maquinaria necesita saber cuáles no tienen horómetro).
-cargarTipoPorMaquina().then(() => {
-  renderizarConsumoPorMaquina(registrosFiltradosActuales, alertasDelReporte);
-  if (registrosFiltradosActuales.length) actualizarGraficas(registrosFiltradosActuales);
+$rd('rd-f-limpiar').addEventListener('click', async () => {
+  const anio = new Date().getFullYear();
+  const rangoInicial = esReporteGeneral ? { desde: `${anio}-01-01`, hasta: `${anio}-12-31` } : limites;
+  const recargar = esReporteGeneral && (limites.desde !== rangoInicial.desde || limites.hasta !== rangoInicial.hasta);
+  limites = rangoInicial;
+  Object.assign(filtro, rangoInicial, { maquina: '', operario: '' });
+  $rd('fecha-inicio-reporte').value = filtro.desde;
+  $rd('fecha-fin-reporte').value = filtro.hasta;
+  $rd('rd-f-maquina').value = '';
+  $rd('rd-f-operario').value = '';
+  $rd('rd-reg-buscar').value = '';
+  pagina = 1;
+  if (recargar) await cargarTodo();
+  else pintarTodo();
 });
 
+// Imprimir y Exportar PDF hacen lo mismo: el CSS de impresión muestra todas
+// las pestañas seguidas y todos los registros (sin paginar).
+$rd('boton-imprimir-reporte').addEventListener('click', () => window.print());
+$rd('boton-exportar-pdf-reporte').addEventListener('click', () => window.print());
 
-// Actualiza las graficas y tablas automaticamente mientras la vista permanece abierta.
-// No requiere recargar manualmente la pagina despues de registrar un nuevo combustible.
+iniciar();
+
+// Se actualiza sola cada 10 segundos mientras la vista está abierta
+// (conserva la pestaña, los filtros y la página en la que esté el usuario).
 setInterval(async () => {
   try {
-    if (esReporteGeneral) {
-      await cargarReporteGeneral();
-    } else if (anioReporte && mesReporte) {
-      const respuesta = await fetch(`/api/reportes/${anioReporte}/${mesReporte}/registros`);
-      aplicarRespuestaReporte(await respuesta.json());
-      // Se conserva el filtro de búsqueda que el usuario tuviera activo.
-      pintarVistaReporte(filtrarRegistrosPorBusqueda(registrosMensuales, buscarMaquinaReporte.value));
-    }
+    if (document.hidden) return; // Pestaña del navegador en segundo plano: no se consulta
+    await cargarTodo();
   } catch (error) {
     console.warn('No fue posible actualizar automaticamente el reporte:', error);
   }
-}, 10000); // Cada 10 segundos
+}, 10000);
