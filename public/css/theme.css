@@ -658,3 +658,69 @@ body.us-panel-abierto { overflow:hidden }
   .us-kpi > span { flex-basis:36px;height:36px }
   .us-kpi em { display:none }
 }
+
+/* ===== Reportes (reportes.html / reportes.js) — prefijo rp- ===== */
+.rp-subtitulo { margin:2px 0 0;color:var(--cc-muted);font-size:.85rem }
+.rp-fila-superior { display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:16px;align-items:stretch }
+.rp-titulo { display:flex;align-items:flex-start;gap:12px }
+.rp-titulo > div { flex:1;min-width:0 }
+.rp-titulo h2 { margin:0 0 2px }
+.rp-titulo .texto-secundario { margin:0 }
+.rp-titulo-con-boton { align-items:center;margin-bottom:14px }
+.rp-titulo-con-boton > button { width:auto;flex:0 0 auto }
+.rp-titulo-icono { display:grid;place-items:center;flex:0 0 42px;height:42px;border-radius:12px;background:var(--cc-naranja-suave);font-size:1.2rem }
+.rp-icono-verde { background:var(--cc-verde-suave) }
+.rp-total-semana { flex:0 0 auto;padding:4px 10px;border-radius:999px;background:var(--cc-naranja-suave);color:var(--cc-acento);font-size:.8rem;white-space:nowrap }
+.rp-total-semana:empty { display:none }
+/* Gráfica de barras de los últimos 7 días */
+.rp-barras { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;margin-top:16px;padding-top:22px }
+.rp-barras[hidden] { display:none }
+.rp-columna { display:flex;flex-direction:column;align-items:center;min-width:0 }
+.rp-riel { display:flex;align-items:flex-end;justify-content:center;width:100%;height:176px;border-bottom:2px solid var(--cc-borde);background:linear-gradient(to top,#f7faf7,transparent) }
+.rp-barra { position:relative;display:block;width:min(64px,78%);border-radius:8px 8px 2px 2px;background:var(--cc-acento);transition:height .3s ease }
+.rp-hoy .rp-barra { background:var(--cc-acento-hover) }
+.rp-valor { position:absolute;bottom:100%;left:50%;transform:translateX(-50%);padding-bottom:4px;color:var(--cc-texto);font-size:.78rem;font-weight:800;white-space:nowrap }
+.rp-dia { margin-top:8px;color:var(--cc-muted);font-size:.74rem;font-weight:700;white-space:nowrap }
+.rp-hoy .rp-dia { color:var(--cc-acento) }
+/* Tarjeta de acceso a Horómetros */
+.rp-horometros { display:flex;flex-direction:column;justify-content:space-between;gap:18px }
+.rp-boton-verde { display:flex;align-items:center;justify-content:center;min-height:46px;padding:8px 16px;border-radius:12px;background:var(--cc-verde-oscuro);color:#fff;font-weight:800;text-decoration:none;transition:background .15s ease }
+.rp-boton-verde:hover { background:var(--cc-verde) }
+.rp-boton-chico { min-height:38px!important;padding:6px 12px!important;font-size:.85rem }
+/* Promedio por máquina: cuadrícula de tarjetas */
+.vista-reportes .grid-analitica-maquinas { grid-template-columns:repeat(auto-fill,minmax(320px,1fr)) }
+.icono-analitica { position:relative;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:var(--cc-verde-oscuro);font-size:1.25rem }
+.icono-analitica .ranking-analitica { position:absolute;right:-6px;bottom:-4px;width:auto;height:auto;padding:1px 5px;border-radius:999px;border:2px solid var(--cc-superficie);font-size:.62rem;font-style:normal;line-height:1.3 }
+.metricas-principales { display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) }
+.metricas-principales > span { display:grid;grid-template-columns:auto 1fr;column-gap:6px;align-items:center;padding:0 10px;border-left:1px solid var(--cc-borde) }
+.metricas-principales > span:first-child { border-left:0;padding-left:0 }
+.metricas-principales i { grid-row:span 2;font-style:normal;font-size:1rem }
+.metricas-principales small { color:var(--cc-muted);font-size:.72rem }
+.metricas-principales strong { color:var(--cc-texto);font-size:.8rem;white-space:nowrap }
+.metricas-principales strong.destacado { color:var(--cc-acento) }
+.vista-reportes .metricas-horometro { margin-top:10px }
+/* Cartas de reportes mensuales */
+.vista-reportes .carta-reporte { display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto 1fr;gap:4px 12px;align-items:start;min-height:0;text-align:left;cursor:pointer }
+.vista-reportes .carta-reporte:hover { border-color:var(--cc-verde) }
+.carta-reporte-icono { grid-row:1 / 3;display:grid;place-items:center;width:40px;height:40px;border-radius:10px;background:var(--cc-verde-suave);font-size:1.15rem }
+.carta-reporte-cuerpo { grid-row:1 / 3;display:grid;gap:3px }
+.vista-reportes .carta-reporte strong { font-size:1rem }
+.vista-reportes .carta-reporte-cuerpo span { font-size:.8rem;font-weight:500 }
+.vista-reportes .carta-reporte-cuerpo b { color:var(--cc-texto) }
+.vista-reportes .carta-reporte em { grid-column:3;font-size:.68rem;padding:3px 9px }
+.vista-reportes .carta-reporte em.estado-cerrado { background:var(--cc-verde-suave);color:var(--cc-verde-oscuro) }
+.vista-reportes .carta-reporte em.estado-general { background:var(--cc-verde-suave);color:var(--cc-verde) }
+.carta-reporte-flecha { grid-column:3;align-self:end;justify-self:end;color:var(--cc-muted);font-size:1.6rem;font-style:normal;line-height:1 }
+@media(max-width:1100px) {
+  .rp-fila-superior { grid-template-columns:1fr }
+}
+@media(max-width:600px) {
+  .rp-barras { gap:4px }
+  .rp-riel { height:140px }
+  .rp-valor { font-size:.66rem }
+  .rp-dia { font-size:.64rem }
+  .rp-titulo-con-boton { flex-wrap:wrap }
+  .rp-titulo-con-boton > button { width:100%;flex-basis:100% }
+  .rp-total-semana { display:none }
+  .vista-reportes .grid-analitica-maquinas { grid-template-columns:1fr }
+}

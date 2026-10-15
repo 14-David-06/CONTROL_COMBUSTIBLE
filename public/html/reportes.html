@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <!-- ==========================================================================
      reportes.html — LISTADO DE REPORTES Y ANÁLISIS
-     Tres bloques: gráfica de los últimos 7 días, análisis de promedio por
-     máquina y las cartas mensuales (que abren reporte-detalle.html).
+     Arriba: gráfica de barras de los últimos 7 días y el acceso a Horómetros.
+     Luego: promedio por máquina y las cartas mensuales (que abren
+     reporte-detalle.html).
      Lógica en ../js/reportes.js. Requiere el permiso 'reportes'.
      ========================================================================== -->
 <html lang="es">
@@ -10,7 +11,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/styles.css">
-  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/theme.css?v=20261015-3">
   <title>Reportes mensuales</title>
   <!-- App instalable (PWA): manifiesto, color de la barra y íconos -->
   <link rel="manifest" href="/manifest.webmanifest">
@@ -23,12 +24,15 @@
   <script src="/js/pwa.js" defer></script>
 </head>
 <body>
-  <main class="pantalla">
+  <main class="pantalla vista-reportes">
     <!-- Encabezado de la vista de reportes mensuales -->
     <header class="encabezado encabezado-compacto">
       <div class="encabezado-control">
         <div class="logo encabezado-logo"><img src="../assets/WhatsApp Image 2026-08-11 at 6.40.45 AM.jpeg" alt="Logo Guaicaramo SAS"></div>
-        <h1>Reportes mensuales</h1>
+        <div>
+          <h1>Reportes mensuales</h1>
+          <p class="rp-subtitulo">Consulta y analiza la información del sistema</p>
+        </div>
       </div>
       <div class="ubicacion ubicacion-compacta">
         <strong>Barranca de Upia, Meta</strong>
@@ -39,32 +43,45 @@
       </button>
     </header>
 
-    <!-- Consumo real de los ultimos 7 dias, todas las maquinas -->
-    <!-- El SVG está vacío: reportes.js dibuja dentro la línea del consumo -->
-    <section class="panel tarjeta-consumo-semana">
-      <h2>Consumo · últimos 7 días</h2>
-      <p class="texto-secundario">Galones despachados por día, todas las máquinas</p>
-      <svg class="grafica-svg" id="grafica-consumo-reportes" viewBox="0 0 400 150" preserveAspectRatio="none" aria-hidden="true"></svg>
-      <p class="grafica-vacia" id="grafica-consumo-reportes-vacia" hidden>Aún no hay suficientes registros esta semana.</p>
-    </section>
+    <div class="rp-fila-superior">
+      <!-- Consumo real de los últimos 7 días, todas las máquinas.
+           reportes.js dibuja una barra por día con sus galones encima. -->
+      <section class="panel rp-grafica">
+        <div class="rp-titulo">
+          <span class="rp-titulo-icono" aria-hidden="true">💧</span>
+          <div>
+            <h2>Consumo · últimos 7 días</h2>
+            <p class="texto-secundario">Galones despachados por día, todas las máquinas.</p>
+          </div>
+          <strong class="rp-total-semana" id="rp-total-semana"></strong>
+        </div>
+        <div class="rp-barras" id="grafica-consumo-reportes" role="img" aria-label="Galones por día de los últimos 7 días"></div>
+        <p class="grafica-vacia" id="grafica-consumo-reportes-vacia" hidden>Aún no hay registros en los últimos 7 días.</p>
+      </section>
 
-    <!-- Acceso a la vista "Horómetros por máquina" (horometros.html): una carta
-         por máquina con horas trabajadas y galones por hora. -->
-    <section class="panel acceso-horometros">
-      <div>
-        <span class="eyebrow-dashboard">HORAS TRABAJADAS Y CONSUMO</span>
-        <h2>🕒 Horómetros por máquina</h2>
-        <p class="texto-secundario">Todas las máquinas con cada tanqueo, horas trabajadas y galones por hora.</p>
-      </div>
-      <a class="boton-principal boton-enlace" href="horometros">Ver horómetros →</a>
-    </section>
+      <!-- Acceso a la vista "Horómetros por máquina" (horometros.html) -->
+      <section class="panel rp-horometros">
+        <div class="rp-titulo">
+          <span class="rp-titulo-icono rp-icono-verde" aria-hidden="true">🚜</span>
+          <div>
+            <h2>Horómetros por máquina</h2>
+            <p class="texto-secundario">Todas las máquinas con cada tanqueo, horas trabajadas y galones por hora.</p>
+          </div>
+        </div>
+        <a class="rp-boton-verde" href="horometros">Ver horómetros →</a>
+      </section>
+    </div>
 
-    <!-- Cartas mensuales generadas automaticamente desde registros_combustible -->
     <!-- Ranking de consumo por máquina del año, con promedio y máximo -->
     <section class="panel panel-analitica-reportes">
-      <div class="titulo-tabla">
-        <div><span class="eyebrow-dashboard">ANÁLISIS DE CONSUMO</span><h2>Promedio por máquina</h2><p class="texto-secundario">El promedio ayuda a detectar suministros fuera del comportamiento habitual.</p></div>
-        <button type="button" id="boton-actualizar-analitica">Actualizar análisis</button>
+      <div class="rp-titulo rp-titulo-con-boton">
+        <span class="rp-titulo-icono" aria-hidden="true">📊</span>
+        <div>
+          <span class="eyebrow-dashboard">ANÁLISIS DE CONSUMO</span>
+          <h2>Promedio por máquina</h2>
+          <p class="texto-secundario">El promedio ayuda a detectar suministros fuera del comportamiento habitual.</p>
+        </div>
+        <button type="button" id="boton-actualizar-analitica">↻ Actualizar análisis</button>
       </div>
       <div id="analitica-maquinas" class="grid-analitica-maquinas"></div>
     </section>
@@ -72,11 +89,11 @@
     <!-- Una carta por mes más la carta "general". Al pulsarlas se navega a
          reporte-detalle con los parámetros correspondientes en la URL. -->
     <section class="panel">
-      <div class="titulo-tabla">
-        <h2>Cartas de reportes</h2>
-        <button type="button" id="boton-actualizar-reportes">Actualizar reportes</button>
+      <div class="rp-titulo rp-titulo-con-boton">
+        <span class="rp-titulo-icono" aria-hidden="true">📄</span>
+        <div><h2>Reportes disponibles</h2></div>
+        <button type="button" class="boton-secundario rp-boton-chico" id="boton-actualizar-reportes">↻ Actualizar reportes</button>
       </div>
-
       <div class="cartas-reportes" id="cartas-reportes"></div>
     </section>
   </main>
@@ -89,6 +106,6 @@
       aplicarPermisosEnlaces();
     }
   </script>
-  <script src="../js/reportes.js?v=20261013-1"></script>
+  <script src="../js/reportes.js?v=20261015-1"></script>
 </body>
 </html>

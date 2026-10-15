@@ -43,12 +43,16 @@ function pintarCartasReportes(reportes) {
   // Carta general para consultar rangos largos entre meses o durante todo el año.
   const cartaGeneral = document.createElement('button');
   cartaGeneral.type = 'button';
-  cartaGeneral.className = 'carta-reporte';
+  cartaGeneral.className = 'carta-reporte carta-reporte-general';
   cartaGeneral.innerHTML = `
-    <strong>Reporte general anual</strong>
-    <span>Consulta reportes continuos</span>
-    <span>resporte de maquinas y/o M1/M2</span>
-    <em>GENERAL</em>
+    <span class="carta-reporte-icono" aria-hidden="true">📅</span>
+    <div class="carta-reporte-cuerpo">
+      <strong>Reporte general anual</strong>
+      <span>Consulta reportes continuos:</span>
+      <span>reporte de máquinas y/o M1/M2</span>
+    </div>
+    <em class="estado-general">General</em>
+    <i class="carta-reporte-flecha" aria-hidden="true">›</i>
   `;
 
   // La carta general abre el detalle en modo "general" (rango libre de fechas).
@@ -63,12 +67,18 @@ function pintarCartasReportes(reportes) {
     const carta = document.createElement('button');
     carta.type = 'button';
     carta.className = 'carta-reporte';
+    // El estado ('abierto' o 'cerrado') pinta la etiqueta: naranja o verde.
+    const estado = String(reporte.estado || '').toLowerCase();
     carta.innerHTML = `
-      <strong>${nombresMeses[reporte.mes - 1]} ${reporte.anio}</strong>
-      <span>${reporte.fechaInicio} hasta ${reporte.fechaFin}</span>
-      <span>Cierre: ${reporte.fechaCierre}</span>
-      <span>${reporte.totalRegistros} registros | ${Number(reporte.totalGalones || 0).toFixed(2)} galones</span>
-      <em>${reporte.estado}</em>
+      <span class="carta-reporte-icono" aria-hidden="true">📅</span>
+      <div class="carta-reporte-cuerpo">
+        <strong>${nombresMeses[reporte.mes - 1]} ${reporte.anio}</strong>
+        <span>${reporte.fechaInicio} hasta ${reporte.fechaFin}</span>
+        <span><b>Cierre:</b> ${reporte.fechaCierre}</span>
+        <span><b>${reporte.totalRegistros} registros</b> | <b>${Number(reporte.totalGalones || 0).toFixed(2)} galones</b></span>
+      </div>
+      <em class="estado-${escapeHtml(estado)}">${escapeHtml(estado)}</em>
+      <i class="carta-reporte-flecha" aria-hidden="true">›</i>
     `;
 
     // El año y el mes viajan por la URL hacia la pantalla de detalle.
@@ -82,62 +92,70 @@ function pintarCartasReportes(reportes) {
 botonActualizarReportes.addEventListener('click', cargarReportes);
 cargarReportes(); // Carga inicial
 
-// Grafica de area con los galones despachados en los ultimos 7 dias,
-// calculada con los registros reales del año en curso.
-// (Es la misma técnica de SVG a mano que se usa en menu.js.)
+// Gráfica de barras con los galones despachados en cada uno de los últimos
+// 7 días (todas las máquinas). Solo se piden los registros de esos 7 días.
+const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 async function cargarConsumoSemanaReportes() {
   const grafica = document.getElementById('grafica-consumo-reportes');
   const vacio = document.getElementById('grafica-consumo-reportes-vacia');
+  const totalTexto = document.getElementById('rp-total-semana');
   if (!grafica) return;
 
-  try {
-    const respuesta = await fetch('/api/reportes-general/registros', { cache: 'no-store' });
-    if (!respuesta.ok) return;
-    const registros = await respuesta.json();
+  // Los últimos 7 días, del más antiguo a hoy.
+  const dias = [];
+  for (let i = 6; i >= 0; i--) {
+    const fecha = new Date();
+    fecha.setDate(fecha.getDate() - i);
+    dias.push(fecha);
+  }
+  const fechas = dias.map((fecha) => fechaLocalISO(fecha));
 
-    // Los últimos 7 días, del más antiguo a hoy.
-    const dias = [];
-    for (let i = 6; i >= 0; i--) {
-      const fecha = new Date();
-      fecha.setDate(fecha.getDate() - i);
-      dias.push(fechaLocalISO(fecha));
-    }
+  try {
+    const respuesta = await fetch(
+      `/api/reportes-general/registros?fechaInicio=${fechas[0]}&fechaFin=${fechas[6]}`,
+      { cache: 'no-store' }
+    );
+    if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
+    // La respuesta es { suministros, jornadas, conciliacion }: se suman los suministros.
+    const { suministros = [] } = await respuesta.json();
 
     // Galones por día (sin contar los cierres de día).
-    const totalesPorDia = dias.map((fecha) =>
-      registros
+    const totalesPorDia = fechas.map((fecha) =>
+      suministros
         .filter((r) => String(r.fecha || '').slice(0, 10) === fecha && !Number(r.cierreDia))
         .reduce((total, r) => total + Number(r.cantidad || 0), 0)
     );
     const totalSemana = totalesPorDia.reduce((a, b) => a + b, 0);
 
     // Sin datos: se oculta la gráfica y se muestra el aviso.
-    if (totalSemana <= 0) {
-      grafica.hidden = true;
-      if (vacio) vacio.hidden = false;
-      return;
-    }
-    grafica.hidden = false;
-    if (vacio) vacio.hidden = true;
+    grafica.hidden = totalSemana <= 0;
+    if (vacio) vacio.hidden = totalSemana > 0;
+    if (totalTexto) totalTexto.textContent = totalSemana > 0 ? `${Math.round(totalSemana).toLocaleString('es-CO')} gal en la semana` : '';
+    if (totalSemana <= 0) return;
 
-    // Conversión de los valores a coordenadas del SVG.
-    const ancho = 400;
-    const alto = 150;
-    const maximo = Math.max(...totalesPorDia, 1); // Escala: el mayor llega arriba
-    const paso = ancho / (totalesPorDia.length - 1); // Distancia entre puntos
-    const puntos = totalesPorDia.map((valor, indice) => {
-      const x = indice * paso;
-      const y = alto - (valor / maximo) * (alto - 20) - 10; // En SVG, Y crece hacia abajo
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    });
-    const linea = puntos.join(' ');
-    const relleno = `0,${alto} ${linea} ${ancho},${alto}`; // Cierra el área contra la base
-
-    grafica.innerHTML = `
-      <polygon points="${relleno}" fill="#f5a524" opacity=".14"></polygon>
-      <polyline points="${linea}" fill="none" stroke="#f5a524" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>
-    `;
+    // Una columna por día: valor encima, barra con altura proporcional y el día abajo.
+    const maximo = Math.max(...totalesPorDia, 1); // El mayor llega arriba
+    grafica.innerHTML = totalesPorDia
+      .map((valor, i) => {
+        const dia = `${DIAS_CORTOS[dias[i].getDay()]} ${String(dias[i].getDate()).padStart(2, '0')}`;
+        const esHoy = i === 6;
+        return `
+        <div class="rp-columna${esHoy ? ' rp-hoy' : ''}" title="${dia}: ${valor.toFixed(1)} gal">
+          <span class="rp-riel">
+            <span class="rp-barra" style="height:${Math.max(valor > 0 ? 3 : 0, (valor / maximo) * 100)}%">
+              <b class="rp-valor">${valor > 0 ? Math.round(valor).toLocaleString('es-CO') : '0'}</b>
+            </span>
+          </span>
+          <span class="rp-dia">${esHoy ? 'Hoy' : dia}</span>
+        </div>`;
+      })
+      .join('');
   } catch (error) {
+    grafica.hidden = true;
+    if (vacio) {
+      vacio.textContent = 'No se pudo cargar el consumo de los últimos 7 días.';
+      vacio.hidden = false;
+    }
     console.warn('No se pudo cargar el consumo de los últimos 7 días', error);
   }
 }
@@ -185,7 +203,9 @@ async function cargarAnaliticaMaquinas(){
       const tipoMaquina=String(x.descripcion||'').trim().split(/\s+/)[0]||'';
       const tipoEtiqueta=tipoMaquina?tipoMaquina.charAt(0).toUpperCase()+tipoMaquina.slice(1).toLowerCase():'';
       card.className=`analitica-maquina-card ${estado}`;
-      card.innerHTML=`<div class="analitica-card-top"><span class="ranking-analitica">#${i+1}</span><div><strong>${escapeHtml(x.maquina||'Sin máquina')}</strong><small>${x.registros} registros${tipoEtiqueta?` · <span class="badge-tipo-maquina">${escapeHtml(tipoEtiqueta)}</span>`:''}</small></div><b>${Number(x.totalGalones||0).toFixed(2)} GAL</b></div><div class="barra-analitica"><span style="width:${Math.min(100,Number(x.totalGalones||0)/maxTotal*100)}%"></span></div><div class="metricas-analitica"><span>Promedio <strong>${Number(x.promedioGalones||0).toFixed(2)} GAL</strong></span><span>Máximo <strong>${Number(x.maximoGalones||0).toFixed(2)} GAL</strong></span>${x.capacidadGalones?`<span>Tanque <strong>${Number(x.capacidadGalones).toFixed(2)} GAL</strong></span>`:''}</div><div class="metricas-analitica metricas-horometro">${metricasHorometro(x)}</div>`;
+      // Ícono de la máquina (🚚 si va por kilometraje) con su puesto en el ranking.
+      const icono=x.unidad==='km'?'🚚':'🚜';
+      card.innerHTML=`<div class="analitica-card-top"><span class="icono-analitica" aria-hidden="true">${icono}<i class="ranking-analitica">#${i+1}</i></span><div><strong>${escapeHtml(x.maquina||'Sin máquina')}</strong><small>${x.registros} registros${tipoEtiqueta?` · <span class="badge-tipo-maquina">${escapeHtml(tipoEtiqueta)}</span>`:''}</small></div><b>${Number(x.totalGalones||0).toFixed(2)} GAL</b></div><div class="barra-analitica"><span style="width:${Math.min(100,Number(x.totalGalones||0)/maxTotal*100)}%"></span></div><div class="metricas-principales"><span><i aria-hidden="true">💧</i><small>Promedio</small><strong class="destacado">${Number(x.promedioGalones||0).toFixed(2)} GAL</strong></span><span><i aria-hidden="true">⏱️</i><small>Máximo</small><strong>${Number(x.maximoGalones||0).toFixed(2)} GAL</strong></span><span><i aria-hidden="true">⛽</i><small>Tanque</small><strong>${x.capacidadGalones?`${Number(x.capacidadGalones).toFixed(2)} GAL`:'—'}</strong></span></div><div class="metricas-analitica metricas-horometro">${metricasHorometro(x)}</div>`;
       analiticaMaquinas.appendChild(card);
     });
   }catch(e){analiticaMaquinas.innerHTML='<div class="estado-vacio-selector">No se pudo cargar el análisis. Verifica la conexión con el servidor.</div>';}
