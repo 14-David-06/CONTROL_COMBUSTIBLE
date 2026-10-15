@@ -236,4 +236,10 @@ test('cron: jornada del día anterior sin cerrar genera alerta y push', async ()
   const cuerpo = await respuesta.json();
   assert.ok(cuerpo.pendientes >= 1);
   assert.ok(cuerpo.alertasNuevas >= 1);
+
+  // Segunda revisión: la alerta ya existe (con su jornada_id) y no se duplica.
+  const otra = await fetch(base + '/api/tareas/recordatorio-cierre', {
+    headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` }
+  });
+  assert.equal((await otra.json()).alertasNuevas, 0);
 });

@@ -253,7 +253,9 @@ class JornadaService {
     let alertasNuevas = 0;
     for (const j of pendientes) {
       const alerta = await this.alertService.create({
-        jornadaId: Number(j.id),
+        // Se guarda tal cual: en Airtable el id es texto (rec...); con Number() quedaba
+        // vacío, el antiduplicados no la encontraba y se creaba una alerta en cada revisión.
+        jornadaId: j.id,
         fecha: j.fecha,
         maquina: 'Cierre de día',
         operario: j.abiertaPor || null,
