@@ -20,6 +20,54 @@ const tipoLectura = (tractor) => (tractor.sin_horometro ? 'na' : tractor.unidad_
 // Lo que se envía al servidor según el select.
 const datosLectura = (valor) => ({ sin_horometro: valor === 'na', unidad_medida: valor === 'km' ? 'km' : 'horas' });
 const TEXTO_LECTURA = { horas: 'Horómetro (horas)', km: 'Kilometraje (km)', na: 'No aplica (N/A)' };
+
+// Tarjetas que reemplazan a la lista desplegable de "Lectura".
+const OPCIONES_LECTURA = [
+  { valor: 'horas', icono: '⏱️', titulo: 'Horómetro', detalle: 'Horas trabajadas' },
+  { valor: 'km', icono: '🚚', titulo: 'Kilometraje', detalle: 'Km recorridos' },
+  { valor: 'na', icono: '🚫', titulo: 'No aplica', detalle: 'Se registra N/A, sin alerta' }
+];
+
+// Oculta el select de lectura y pone en su lugar tres tarjetas para tocar.
+// El select sigue guardando el valor, así el resto del código no cambia.
+function selectorLectura(select) {
+  const grupo = document.createElement('div');
+  grupo.className = 'selector-lectura';
+  grupo.setAttribute('role', 'radiogroup');
+  grupo.setAttribute('aria-label', 'Tipo de lectura');
+
+  const botones = OPCIONES_LECTURA.map((opcion) => {
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = 'opcion-lectura';
+    boton.dataset.valor = opcion.valor;
+    boton.setAttribute('role', 'radio');
+    boton.innerHTML = `<span class="opcion-lectura-icono" aria-hidden="true">${opcion.icono}</span><span class="opcion-lectura-texto"><strong>${opcion.titulo}</strong><small>${opcion.detalle}</small></span>`;
+    boton.addEventListener('click', () => {
+      select.value = opcion.valor;
+      pintar();
+    });
+    return boton;
+  });
+
+  // Marca la tarjeta que corresponde al valor actual del select.
+  function pintar() {
+    botones.forEach((boton) => {
+      const activa = boton.dataset.valor === select.value;
+      boton.classList.toggle('activa', activa);
+      boton.setAttribute('aria-checked', String(activa));
+    });
+  }
+
+  grupo.append(...botones);
+  select.hidden = true;
+  select.after(grupo);
+  // Al limpiar el formulario el select vuelve a "horas": se repinta después del reset.
+  select.form?.addEventListener('reset', () => setTimeout(pintar));
+  pintar();
+}
+
+selectorLectura(tractorHorometro);
 const cuerpoTablaTractores = document.getElementById('cuerpo-tabla-tractores');
 const cantidadTractores = document.getElementById('cantidad-tractores');
 
@@ -168,7 +216,7 @@ function activarEdicionTractor(tarjeta, tractor) {
       <label>Descripción<input class="ed-descripcion" type="text" maxlength="150" required></label>
       <label>Centro de costo<input class="ed-centro" type="text" maxlength="20" required></label>
       <label>Capacidad (galones)<input class="ed-capacidad" type="number" min="0" step="0.01" required></label>
-      <label>Lectura<select class="ed-horometro"><option value="horas">Horómetro (horas trabajadas)</option><option value="km">Kilometraje (km recorridos)</option><option value="na">No aplica (se registra N/A, sin alerta)</option></select></label>
+      <div class="ed-campo-lectura"><span>Lectura</span><select class="ed-horometro"><option value="horas">Horómetro (horas trabajadas)</option><option value="km">Kilometraje (km recorridos)</option><option value="na">No aplica (se registra N/A, sin alerta)</option></select></div>
     </div>
     <div class="acciones-registro"></div>`;
 
@@ -178,6 +226,7 @@ function activarEdicionTractor(tarjeta, tractor) {
   tarjeta.querySelector('.ed-centro').value = tractor.centro_costo ?? '';
   tarjeta.querySelector('.ed-capacidad').value = Number.isFinite(capacidad) ? capacidad : 0;
   tarjeta.querySelector('.ed-horometro').value = tipoLectura(tractor);
+  selectorLectura(tarjeta.querySelector('.ed-horometro'));
 
   const acciones = tarjeta.querySelector('.acciones-registro');
   const botonGuardar = document.createElement('button');
